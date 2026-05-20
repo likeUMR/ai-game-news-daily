@@ -696,6 +696,7 @@ body {
   border-radius: 14px;
   padding: 10px 12px;
   font-size: 13px;
+  font-family: inherit;
 }
 
 .flowchart-btn:hover {

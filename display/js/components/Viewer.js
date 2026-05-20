@@ -11,6 +11,15 @@ export class ViewerComponent {
   }
 
   /**
+   * 将相对路径规范化，确保 iframe 加载完成事件能准确匹配当前页面
+   * @param {string} url
+   * @returns {string}
+   */
+  resolveUrl(url) {
+    return new globalThis.URL(url, this.container.ownerDocument.baseURI).href;
+  }
+
+  /**
    * 直接加载指定 URL (例如流程图页面)
    * @param {string} url 
    */
@@ -24,8 +33,8 @@ export class ViewerComponent {
     iframe.classList.remove('visible');
     emptyState.classList.remove('visible');
     
-    this.currentUrl = url;
-    iframe.src = url;
+    this.currentUrl = this.resolveUrl(url);
+    iframe.src = this.currentUrl;
   }
 
   /**
@@ -44,17 +53,18 @@ export class ViewerComponent {
     emptyState.classList.remove('visible');
     
     const url = getReportUrl(type, date);
-    this.currentUrl = url;
+    const absoluteUrl = this.resolveUrl(url);
+    this.currentUrl = absoluteUrl;
 
     // 检查文件是否存在
     const exists = await checkFileExists(url);
     
     // 如果在异步检测期间，用户已经切换到了其他报告，我们就放弃本次加载
-    if (this.currentUrl !== url) return;
+    if (this.currentUrl !== absoluteUrl) return;
 
     if (exists) {
       // 文件存在，加载到 iframe 中
-      iframe.src = url;
+      iframe.src = absoluteUrl;
     } else {
       // 文件不存在，显示空状态
       loader.classList.remove('visible');
@@ -103,7 +113,7 @@ export class ViewerComponent {
     
     iframe.addEventListener('load', () => {
       // 检查当前 URL 确保没有被覆盖
-      if (iframe.src && iframe.src.includes(this.currentUrl)) {
+      if (iframe.src && iframe.src === this.currentUrl) {
         loader.classList.remove('visible');
         iframe.classList.add('visible');
       }

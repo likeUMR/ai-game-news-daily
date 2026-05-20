@@ -90,7 +90,7 @@ class App {
       this.currentDate = null;
 
       // 3. 让 Viewer 载入流程图
-      this.viewer.loadUrl('project-flow.html');
+      this.viewer.loadUrl(flowchartBtn.dataset.url || 'project-flow.html');
     });
   }
 
