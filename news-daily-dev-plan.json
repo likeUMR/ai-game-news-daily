@@ -1,0 +1,120 @@
+{
+  "config": {
+    "workspace": ".",
+    "reviewEvery": 2,
+    "model": "gpt-5.5",
+    "sandbox": "danger-full-access",
+    "ephemeral": true
+  },
+  "steps": [
+    {
+      "id": "STEP-01",
+      "title": "Scaffold autonomous news daily project",
+      "done": true,
+      "prompt": "Create the initial project scaffold for an autonomous AI + game news daily production system in the current workspace.\nContext: use 新闻日报系统复刻总结.md as the product brief. The final system must run end-to-end without human intervention during plan execution.\nRequirements:\n- Inspect the workspace first and preserve existing files.\n- Create a Node.js + TypeScript project if no suitable app exists.\n- Add package.json scripts for dev, build, test, lint, and a single pipeline command.\n- Use a simple maintainable structure: src/config, src/db, src/collectors, src/ai, src/pipeline, src/render, src/video, src/cli, tests, data, output.\n- Add README.md with local setup, environment variables, pipeline command, and output locations.\n- Add .gitignore for node_modules, build output, logs, databases, generated media, and secrets.\n- Do not require paid APIs for tests; every external AI/TTS dependency must have a deterministic mock mode.\nAcceptance checks:\n- npm install succeeds.\n- npm run build succeeds or, if implementation is not complete yet, the scaffold compiles with placeholder modules.\n- README documents the no-human-intervention assumption and mock mode."
+    },
+    {
+      "id": "STEP-02",
+      "title": "Define configuration and source registry",
+      "done": true,
+      "prompt": "Implement configuration loading and the initial source registry.\nContext: use 新闻日报系统复刻总结.md, especially sections about RSS, X/social sources, manual Markdown, and AI + game supplemental sources.\nRequirements:\n- Add typed configuration for app paths, database path, output path, collection window hours, dedupe window hours, model provider, TTS provider, mock mode, score thresholds, and source limits.\n- Load config from environment variables with safe defaults; never require secrets in test/mock mode.\n- Add a structured source registry file under config or data containing AI native, game native, AI x game, official/community, and manual sources.\n- Include the supplemental game sources from the summary: GameLook, GameLook AI, 机核, 触乐, 游戏陀螺, 游戏茶馆, 游民星空, 游研社, 罗斯基, 3DM, 游戏葡萄. Assign source_type, priority, source_weight, suggested_frequency, and collection strategy.\n- Provide validation with clear errors for invalid config or sources.\nAcceptance checks:\n- npm run build succeeds.\n- Add tests for config defaults, env override, and source registry validation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-03",
+      "title": "Implement SQLite persistence model",
+      "done": true,
+      "prompt": "Implement the database layer for structured news items and pipeline runs.\nContext: the summary recommends using a structured news item as the shared intermediate product for text and video outputs.\nRequirements:\n- Use SQLite with a lightweight Node library already suitable for the project.\n- Create migrations or an idempotent initializer.\n- Implement tables for sources, raw_items, processed_items, pipeline_runs, generated_outputs, and asset_records.\n- The processed item schema must include source_url, source_name, source_type, source_weight, published_at, collected_at, raw_content, summary, keywords, category, score, duplicate_of, selected, official_sources, article_title, article_body, intro_summary, assets, script_segments, tts_segments, timeline, subtitle_srt, ai_relevance_score, game_relevance_score, cross_relevance_score, ai_tags, game_tags, is_topic_candidate.\n- Add repository functions for upsert source, insert raw item, find by canonical URL/content hash, list recent items for dedupe, save processed fields, select candidates, save generated output.\nAcceptance checks:\n- npm run build succeeds.\n- Add tests using a temp database for initialization, insert, upsert, query, and JSON field round trips.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-04",
+      "title": "Build collection adapters",
+      "done": true,
+      "prompt": "Implement collection adapters for RSS, simple webpage scraping, local Markdown/manual submissions, and seed/demo data.\nContext: the summary says RSS is the first priority, manual Markdown is a necessary supplement, and high-noise sources should be collected with limits.\nRequirements:\n- Add a common Collector interface returning normalized raw items with title, url, source_name, source_type, published_at, collected_at, author, excerpt, raw_content, and metadata.\n- Implement RSS collection with feed parsing, timeout, per-source limit, and graceful failure per source.\n- Implement simple webpage collection for configured sources without RSS: fetch listing page, extract links conservatively, collect title/url/excerpt where possible, and skip if extraction is unsafe.\n- Implement local Markdown ingestion from data/manual/*.md with frontmatter support for source_url, source_name, published_at, tags.\n- Implement demo collector that produces deterministic AI x game sample items for tests and mock runs.\n- Add CLI command npm run collect or equivalent to collect into SQLite.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover demo collection, Markdown ingestion, RSS parsing from fixture XML, dedupe-safe URL normalization, and failure isolation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-05",
+      "title": "Normalize ingestion and dedupe history",
+      "done": true,
+      "prompt": "Implement ingestion normalization and duplicate detection.\nContext: the summary requires excluding duplicate content from the previous daily report and from the 72-hour short-term window.\nRequirements:\n- Add canonical URL normalization, content hashing, title normalization, and lightweight similarity scoring.\n- During ingestion, reject exact duplicate URLs/content hashes and mark likely duplicates against recent processed/raw items within the configured dedupe window.\n- Preserve duplicate relationships through duplicate_of rather than deleting useful records.\n- Add logic to prefer official, earlier, or higher-weight sources when multiple items describe the same event.\n- Add CLI command to run collection + ingestion in one step.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover exact URL duplicate, exact content duplicate, near-duplicate title/body, 72-hour window behavior, and source preference.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-06",
+      "title": "Create AI provider abstraction and prompts",
+      "done": true,
+      "prompt": "Implement the AI processing abstraction and prompt library.\nContext: the summary separates low-cost processing tasks from higher-quality generation tasks, and the plan must remain runnable without paid APIs.\nRequirements:\n- Add an AIProvider interface for classify/filter, summarize, extract keywords, score relevance, generate article entries, format markdown, and generate voiceover script.\n- Implement a deterministic MockAIProvider that returns stable structured JSON for tests and demo pipeline runs.\n- Implement an optional OpenAI-compatible HTTP provider controlled by env vars, but do not require it for tests.\n- Add robust JSON parsing and schema validation for AI responses.\n- Add prompt templates for AI + game daily news: news value, AI relevance, game relevance, cross relevance, AI tags, game tags, exclusion reasons, article generation, and voiceover script generation.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover mock provider, response validation, malformed JSON handling, and prompt variable interpolation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-07",
+      "title": "Implement screening and scoring pipeline",
+      "done": true,
+      "prompt": "Implement the automated AI screening pipeline.\nContext: the summary describes AI initial filtering, summary generation, keyword extraction, classification, dedupe, and scoring before review. Because this development plan must run without human intervention, replace manual review with deterministic thresholding plus audit logs.\nExternal API context: the project should support OpenAI-compatible chat completions via OPENAI_COMPATIBLE_BASE_URL=https://api.openai.com/v1 and OPENAI_COMPATIBLE_MODEL=gpt-4o-mini, with the API key supplied through OPENAI_COMPATIBLE_API_KEY at runtime. Do not hard-code secrets.\nRequirements:\n- Add pipeline stage to process pending raw items into processed_items.\n- For every item, generate summary, keywords, category, AI tags, game tags, news value score, AI relevance score, game relevance score, cross relevance score, and exclusion reason.\n- Mark is_topic_candidate true only when cross relevance and news value pass configured thresholds, with source weight incorporated.\n- Exclude non-AI game news, generic tutorials, pure entertainment gossip, low-information reposts, and content unrelated to AI x game.\n- Record processing errors without stopping the whole run unless configuration/database is broken.\n- Add a CLI command to run screening.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover candidate selection, exclusion categories, source weight influence, and processing error isolation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-08",
+      "title": "Automate editorial selection and verification",
+      "done": true,
+      "prompt": "Implement automated editorial selection and verification to replace manual intervention during execution.\nContext: the source system includes human review for official source selection, accuracy checks, category adjustment, and hallucination repair. This plan must be fully autonomous, so implement conservative automated rules and transparent audit output.\nRequirements:\n- Add selection logic that chooses a configurable number of daily items by category, score, source weight, freshness, and duplicate grouping.\n- For each selected item, keep the best source URL, collect alternative official_sources if present, and preserve evidence fields used for selection.\n- Add automated verification checks: source URL exists or was collected successfully, title/body are non-empty, published date is plausible, source is not low-trust unless score is high, duplicate_of is respected, generated claims must trace to raw_content/summary/source metadata.\n- Add an audit report in output/audit with selected, rejected, duplicate, and failed-verification sections.\n- If too few items pass thresholds, lower only the candidate count requirement by filling with highest-confidence items; do not ask the user.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover category balancing, duplicate group winner selection, verification failure, fallback when too few items pass, and audit report creation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-09",
+      "title": "Generate structured article content",
+      "done": true,
+      "prompt": "Implement article content generation from selected structured news items.\nContext: the summary says selected items are grouped by category, sent to AI as context, and turned into title, body, source links, and intro summaries.\nRequirements:\n- Group selected items by category and pass grouped context to AIProvider.\n- Generate article_title, article_body, intro_summary, and preserve source links for every selected item.\n- Add post-generation validation to prevent empty titles, missing source links, overlong paragraphs, and unsupported claims.\n- Add deterministic fallback article text from summary/raw metadata when AI generation fails.\n- Save generated fields back into the database.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover grouped generation, source preservation, validation failure fallback, and database persistence.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-10",
+      "title": "Render Markdown and platform text outputs",
+      "done": true,
+      "prompt": "Implement text edition rendering for Markdown, Zhihu-style Markdown, and WeChat-compatible HTML.\nContext: the summary describes a text edition with Markdown layout, table of contents, summaries, bold/code/table formatting, Zhihu adaptation, and WeChat HTML conversion.\nRequirements:\n- Render a complete daily report Markdown file under output/YYYY-MM-DD/daily.md with title, date, table of contents, category sections, item summaries, article bodies, and source links.\n- Render a Zhihu-compatible Markdown variant under output/YYYY-MM-DD/zhihu.md.\n- Render a WeChat-compatible HTML file under output/YYYY-MM-DD/wechat.html using constrained inline styles and no external assets.\n- Add a generated_outputs database record for each output.\n- Include a CLI command for text rendering and make it usable after mock pipeline data.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover Markdown structure, source link preservation, table of contents, WeChat HTML escaping/sanitization, and output file creation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-11",
+      "title": "Create voiceover script, TTS abstraction, timeline, and SRT",
+      "done": true,
+      "prompt": "Implement video narration planning: voiceover script generation, TTS abstraction, segment durations, timeline, and subtitles.\nContext: the summary says video production is driven by TTS audio length; scripts are split by event and punctuation, each short sentence becomes a TTS request, durations define the video timeline and SRT.\nRequirements:\n- Generate script_segments for selected items with intro, per-item segments, transitions, and outro.\n- Implement TTSProvider interface with deterministic MockTTSProvider that creates placeholder WAV or silent audio files with predictable durations.\n- Implement optional HTTP TTS provider only behind env vars; tests must use mock.\n- Split text into sentence-level tts_segments, synthesize each segment, compute duration, and build a timeline array.\n- Generate valid SRT subtitles from timeline and save subtitle_srt to database and output/YYYY-MM-DD/subtitles.srt.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover sentence splitting for Chinese punctuation, mock TTS duration calculation, timeline continuity, SRT formatting, and output file creation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-12",
+      "title": "Render HTML video frames",
+      "done": true,
+      "prompt": "Implement HTML frame rendering for the video edition.\nContext: the summary says the original system generates HTML pages and screenshots them through browser automation rather than directly generating images.\nRequirements:\n- Add HTML templates for title, category divider, news item, quote/source, progress bar, and outro frames.\n- Render frame HTML files under output/YYYY-MM-DD/frames/html using selected item data, article titles, summaries, source names, and timeline metadata.\n- Add a browser screenshot renderer using Playwright or an equivalent local dependency to export PNG frames under output/YYYY-MM-DD/frames/png.\n- Ensure rendering works in CI/headless mode and has a mock-safe fallback if browser binaries are not installed: create simple SVG/PNG placeholder frames so the pipeline still completes.\n- Keep frame dimensions configurable, default 1920x1080.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover template escaping, frame count, metadata mapping, fallback renderer behavior, and output file creation.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-13",
+      "title": "Compose final video artifact",
+      "done": true,
+      "prompt": "Implement video composition from frames, timeline, subtitles, and audio.\nContext: the summary describes assembling frames, audio, subtitles, transitions, progress bar, and final video according to the TTS-driven timeline.\nRequirements:\n- Add VideoComposer interface with an ffmpeg implementation if ffmpeg is available and a deterministic mock composer if it is not.\n- Compose output/YYYY-MM-DD/daily.mp4 from generated frame images and mock or real audio segments.\n- Include subtitles either burned into the video when ffmpeg is available or emitted as sidecar SRT in mock mode.\n- Save a generated_outputs database record for video artifacts.\n- The full pipeline must not fail merely because ffmpeg is missing; it should produce a clear mock artifact and audit note.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover composer selection, ffmpeg command construction, mock artifact creation, missing-frame handling, and generated_outputs persistence.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-14",
+      "title": "Implement full autonomous pipeline CLI",
+      "done": true,
+      "prompt": "Implement the single-command autonomous pipeline that runs collection through final outputs.\nContext: the user needs the development plan to execute without manual intervention, and the target product should also support no-touch mock/demo execution.\nRequirements:\n- Add CLI commands: init-db, collect, screen, select, generate-article, render-text, plan-video, render-frames, compose-video, run-daily.\n- run-daily must execute all stages in order with a pipeline_run record, stage timing, error summaries, and final artifact paths.\n- Add --date, --mock, --limit, and --config options where appropriate.\n- In mock mode, run-daily must complete using demo data and mock AI/TTS/video services.\n- Add meaningful exit codes: 0 success, nonzero only for unrecoverable failures.\nAcceptance checks:\n- npm run build succeeds.\n- npm test succeeds.\n- A command equivalent to npm run pipeline -- --mock --date 2026-05-19 completes and writes text, audit, subtitle, frame, and video/mock-video artifacts under output/2026-05-19."
+    },
+    {
+      "id": "STEP-15",
+      "title": "Add scheduling and distribution package exports",
+      "done": true,
+      "prompt": "Implement scheduling helpers and distribution-ready export packages without performing real platform uploads.\nContext: the summary lists Bilibili, YouTube, WeChat, Zhihu, Xiaohongshu, and Douyin distribution, but real uploads require credentials and platform APIs. The no-intervention plan should prepare packages rather than ask for login.\nRequirements:\n- Add export folders under output/YYYY-MM-DD/distribution for bilibili, youtube, wechat, zhihu, xiaohongshu, douyin.\n- Generate metadata files for each platform: title, description, tags, source links, subtitle path where supported, video path where relevant, and platform-specific length limits.\n- Implement validation for Bilibili 2000-character description and YouTube 5000-character description constraints from the summary.\n- Add a scheduler config example for daily runs using npm scripts or a documented cron/Task Scheduler command, but do not register a system schedule automatically.\n- Add README docs explaining how to manually connect real publishing later while the current pipeline remains credential-free.\nAcceptance checks:\n- npm run build succeeds.\n- Tests cover export package creation, platform metadata limits, path references, and no-credential behavior.\n- npm test succeeds."
+    },
+    {
+      "id": "STEP-16",
+      "title": "Add quality gates and end-to-end tests",
+      "done": true,
+      "prompt": "Add comprehensive quality gates for the autonomous pipeline.\nContext: the summary emphasizes accuracy, source preservation, dedupe reliability, structured intermediate data, and platform adaptation.\nRequirements:\n- Add end-to-end tests that initialize a temp database, run the mock daily pipeline, and assert all expected artifacts exist.\n- Add snapshot or structural assertions for daily.md, zhihu.md, wechat.html, audit report, subtitles.srt, distribution metadata, and generated output records.\n- Add tests that verify every selected article has at least one source link, every generated claim field is derived from available source context or fallback text, and duplicate items do not both appear in the final report.\n- Add lint/typecheck/test scripts if not already present and make npm test the default verification command.\nAcceptance checks:\n- npm run build succeeds.\n- npm test succeeds.\n- The mock end-to-end test is deterministic across repeated runs."
+    },
+    {
+      "id": "STEP-17",
+      "title": "Finalize documentation and operational runbook",
+      "done": true,
+      "prompt": "Finalize documentation for operating and extending the system.\nContext: the implementation follows 新闻日报系统复刻总结.md but adapts it for autonomous execution.\nRequirements:\n- Update README.md with architecture overview, data flow, source registry, AI/TTS providers, mock mode, real provider env vars, CLI commands, output artifacts, and troubleshooting.\n- Add docs/architecture.md with the pipeline diagram and module responsibilities.\n- Add docs/source-policy.md documenting source tiers, AI + game relevance criteria, exclusion rules, dedupe window, scoring thresholds, and why human review was replaced by automated verification/audit for this plan.\n- Add docs/publishing.md documenting distribution package semantics and future real upload integration points.\n- Ensure docs reference the original summary file as the product brief.\nAcceptance checks:\n- npm run build succeeds.\n- npm test succeeds.\n- Documentation contains a complete no-human-intervention run command and explains expected output paths."
+    },
+    {
+      "id": "STEP-18",
+      "title": "Final autonomous pipeline verification",
+      "done": true,
+      "prompt": "Perform final verification and fix any issues found.\nRequirements:\n- Run dependency installation if needed.\n- Run formatting/linting if configured.\n- Run npm run build.\n- Run npm test.\n- Run npm run test:llm using OPENAI_COMPATIBLE_BASE_URL=https://api.openai.com/v1, OPENAI_COMPATIBLE_MODEL=gpt-4o-mini, and the OPENAI_COMPATIBLE_API_KEY from the environment. Do not print the API key.\n- Run the full mock autonomous daily pipeline for date 2026-05-19.\n- Inspect generated output paths and verify that daily.md, zhihu.md, wechat.html, audit report, subtitles.srt, distribution metadata, and video or mock-video artifact exist.\n- Fix any failing tests, build errors, API smoke-test failures caused by project code, or broken artifact paths directly.\n- Do not modify the JSON plan file.\nAcceptance checks:\n- Build passes.\n- Tests pass.\n- npm run test:llm passes against the relay API when the key is present in the environment.\n- Mock full pipeline completes with all expected artifacts.\n- Final response summarizes commands run and key artifact paths."
+    }
+  ],
+  "reviewPrompt": "Review the current project after the latest implementation steps and directly fix low-risk issues. Focus on autonomous execution, build/test reliability, source preservation, dedupe correctness, generated output validity, documentation accuracy, and OpenAI-compatible relay support. Do not edit the plan file. Prefer targeted fixes over broad rewrites. Run relevant tests after any changes. During every review, run npm run test:llm with OPENAI_COMPATIBLE_BASE_URL=https://api.openai.com/v1, OPENAI_COMPATIBLE_MODEL=gpt-4o-mini, and the API key supplied by OPENAI_COMPATIBLE_API_KEY in the environment; do not print or persist the key. If the smoke test fails because of project code, fix it. If it fails because the remote service is unavailable, document the failure briefly and continue only after normal build and unit tests pass."
+}

@@ -1,0 +1,50 @@
+{
+  "name": "ai-game-news-daily",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Autonomous AI + game news daily production system scaffold.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/cli/index.ts run",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:llm": "node scripts/smoke-openai-compatible.mjs",
+    "lint": "eslint .",
+    "pipeline": "tsx src/cli/index.ts run-daily",
+    "init-db": "tsx src/cli/index.ts init-db",
+    "collect": "tsx src/cli/index.ts collect",
+    "ingest": "tsx src/cli/index.ts ingest",
+    "screen": "tsx src/cli/index.ts screen",
+    "screening": "tsx src/cli/index.ts screening",
+    "select": "tsx src/cli/index.ts select",
+    "generate-article": "tsx src/cli/index.ts generate-article",
+    "collect-run": "tsx src/cli/index.ts collect-run",
+    "render-text": "tsx src/cli/index.ts render-text",
+    "plan-video": "tsx src/cli/index.ts plan-video",
+    "render-frames": "tsx src/cli/index.ts render-frames",
+    "compose-video": "tsx src/cli/index.ts compose-video",
+    "run-daily": "tsx src/cli/index.ts run-daily",
+    "run-weekly": "tsx src/cli/index.ts run-weekly",
+    "schedule:daily:example": "npm run run-daily -- --mock"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.7",
+    "eslint": "^9.18.0",
+    "playwright-core": "^1.60.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^2.1.8"
+  }
+}

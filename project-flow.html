@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI + Game News Daily 项目流程图</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2f2;
+      --blue: #2563eb;
+      --cyan: #0891b2;
+      --green: #059669;
+      --amber: #d97706;
+      --red: #dc2626;
+      --purple: #7c3aed;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      font-family: Inter, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 34rem),
+        linear-gradient(180deg, #eef4ff 0%, var(--bg) 32rem);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(1480px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 36px 0 56px;
+    }
+
+    header {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 52px);
+      letter-spacing: -0.04em;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .hero-meta,
+    .legend,
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.78);
+      color: #344054;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--blue);
+    }
+
+    .dot.cyan { background: var(--cyan); }
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+    .dot.purple { background: var(--purple); }
+    .dot.red { background: var(--red); }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: var(--shadow);
+      padding: 24px;
+    }
+
+    .flow-panel {
+      overflow-x: auto;
+      margin-bottom: 24px;
+    }
+
+    .flow {
+      min-width: 1320px;
+      display: grid;
+      grid-template-columns: 1.08fr 0.34fr 1.08fr 0.34fr 1.08fr 0.34fr 1.08fr 0.34fr 1.08fr;
+      align-items: stretch;
+      gap: 10px;
+    }
+
+    .stage {
+      position: relative;
+      min-height: 520px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: #fff;
+      padding: 18px;
+    }
+
+    .stage::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 7px;
+      border-radius: 22px 0 0 22px;
+      background: var(--blue);
+    }
+
+    .stage.input::before { background: var(--cyan); }
+    .stage.collect::before { background: var(--blue); }
+    .stage.process::before { background: var(--purple); }
+    .stage.generate::before { background: var(--green); }
+    .stage.output::before { background: var(--amber); }
+
+    .stage-num {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .stage-title {
+      margin-top: 6px;
+      font-size: 22px;
+      font-weight: 850;
+      letter-spacing: -0.03em;
+    }
+
+    .stage-subtitle {
+      margin: 6px 0 16px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    li {
+      margin: 8px 0;
+      color: #344054;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .card-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mini-card {
+      border: 1px solid #edf1f7;
+      border-radius: 16px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+
+    .mini-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .mini-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .arrow {
+      display: grid;
+      place-items: center;
+      color: var(--blue);
+      font-weight: 900;
+    }
+
+    .arrow svg {
+      width: 100%;
+      height: 90px;
+      overflow: visible;
+    }
+
+    .arrow path {
+      stroke: currentColor;
+      stroke-width: 4;
+      stroke-linecap: round;
+      fill: none;
+      stroke-dasharray: 10 10;
+    }
+
+    .arrow polygon {
+      fill: currentColor;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .source-group {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+      padding: 16px;
+    }
+
+    .source-group h3 {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .source {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 9px 0;
+      border-top: 1px solid #eef2f7;
+    }
+
+    .source:first-of-type {
+      border-top: 0;
+    }
+
+    .source-name {
+      color: var(--ink);
+      font-weight: 750;
+      font-size: 14px;
+    }
+
+    .source-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .strategy {
+      align-self: start;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #475467;
+      border: 1px solid #e5e7eb;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .table-like {
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 14px;
+      padding: 13px;
+      border: 1px solid #edf1f7;
+      border-radius: 16px;
+      background: #fbfdff;
+    }
+
+    .row strong {
+      color: var(--ink);
+    }
+
+    .row span {
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 4px solid var(--amber);
+      border-radius: 12px;
+      background: #fffbeb;
+      color: #92400e;
+      line-height: 1.65;
+      font-size: 13px;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 7px;
+      background: #f1f5f9;
+      color: #0f172a;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    @media (max-width: 980px) {
+      main {
+        width: min(100vw - 24px, 1480px);
+        padding-top: 24px;
+      }
+
+      .grid-2,
+      .source-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="chips">
+        <span class="chip"><span class="dot cyan"></span>输入信源</span>
+        <span class="chip"><span class="dot"></span>采集入库</span>
+        <span class="chip"><span class="dot purple"></span>筛选验证</span>
+        <span class="chip"><span class="dot green"></span>内容生成</span>
+        <span class="chip"><span class="dot amber"></span>输出分发</span>
+      </div>
+      <h1>AI + Game News Daily 项目流程图</h1>
+      <p>从 CLI/配置和信源输入开始，经过去重、AI 筛选、选题校验、文章生成、图文/视频渲染，最终产出日报、微信 HTML、知乎稿、视频素材和分发包。</p>
+      <div class="hero-meta">
+        <span class="chip">主入口：<code>src/cli/index.ts</code></span>
+        <span class="chip">完整流水线：<code>runPipeline()</code></span>
+        <span class="chip">信源注册表：<code>sourceRegistry</code>，共 17 个信源</span>
+      </div>
+    </header>
+
+    <section class="panel flow-panel" aria-label="端到端流程图">
+      <div class="flow">
+        <article class="stage input">
+          <div class="stage-num">Step 01</div>
+          <div class="stage-title">输入</div>
+          <p class="stage-subtitle">运行参数、环境配置、信源注册表和手动素材。</p>
+          <div class="card-list">
+            <div class="mini-card">
+              <strong>CLI 命令</strong>
+              <span><code>run-daily</code>、<code>collect</code>、<code>screen</code>、<code>select</code>、<code>generate-article</code>、<code>render-text</code> 等。</span>
+            </div>
+            <div class="mini-card">
+              <strong>配置阈值</strong>
+              <span><code>MOCK_MODE</code>、<code>DAILY_ITEM_COUNT</code>、AI/游戏/新闻价值/交叉相关性阈值、输出目录、数据库路径。</span>
+            </div>
+            <div class="mini-card">
+              <strong>自动信源</strong>
+              <span>RSS/RSSHub、网页列表、JSON API、官方站点等策略驱动的 17 个注册信源。</span>
+            </div>
+            <div class="mini-card">
+              <strong>手动输入</strong>
+              <span><code>data/manual/*.md</code>，支持 frontmatter：标题、来源 URL、作者、发布时间、标签等。</span>
+            </div>
+          </div>
+        </article>
+
+        <div class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 160 90"><path d="M10 45 H130"></path><polygon points="130,30 155,45 130,60"></polygon></svg>
+        </div>
+
+        <article class="stage collect">
+          <div class="stage-num">Step 02</div>
+          <div class="stage-title">采集与入库</div>
+          <p class="stage-subtitle">把外部资讯标准化成 RawCollectedItem，再持久化到 SQLite。</p>
+          <div class="card-list">
+            <div class="mini-card">
+              <strong>采集器</strong>
+              <span><code>RssCollector</code>、<code>JsonApiCollector</code>、<code>WebPageCollector</code>、<code>MarkdownCollector</code>、Mock 演示采集。</span>
+            </div>
+            <div class="mini-card">
+              <strong>字段标准化</strong>
+              <span>统一为标题、URL、来源名、来源类型、发布时间、采集时间、摘要、正文、元数据。</span>
+            </div>
+            <div class="mini-card">
+              <strong>入库</strong>
+              <span>写入 <code>sources</code> 和 <code>raw_items</code>，计算 canonical URL 与 content hash。</span>
+            </div>
+            <div class="mini-card">
+              <strong>初步去重</strong>
+              <span>按 URL/hash 跳过完全重复，并在近 72 小时窗口内标记近似重复。</span>
+            </div>
+          </div>
+        </article>
+
+        <div class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 160 90"><path d="M10 45 H130"></path><polygon points="130,30 155,45 130,60"></polygon></svg>
+        </div>
+
+        <article class="stage process">
+          <div class="stage-num">Step 03</div>
+          <div class="stage-title">筛选与选题</div>
+          <p class="stage-subtitle">AI 处理每条新闻，编辑规则决定当天进入日报的候选。</p>
+          <div class="card-list">
+            <div class="mini-card">
+              <strong>AI 丰富</strong>
+              <span>并行执行总结、关键词抽取、分类过滤、初版文章条目生成。</span>
+            </div>
+            <div class="mini-card">
+              <strong>评分维度</strong>
+              <span>新闻价值、AI 相关性、游戏相关性、AI x 游戏交叉相关性，并叠加来源权重。</span>
+            </div>
+            <div class="mini-card">
+              <strong>排除规则</strong>
+              <span>重复、低价值转载、纯娱乐八卦、泛教程、非 AI 游戏新闻、缺少游戏相关性等。</span>
+            </div>
+            <div class="mini-card">
+              <strong>选题校验</strong>
+              <span>按重复组挑 winner，检查发布时间新鲜度、低信任源高分要求、证据可追溯性和每日数量/分类配额。</span>
+            </div>
+          </div>
+        </article>
+
+        <div class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 160 90"><path d="M10 45 H130"></path><polygon points="130,30 155,45 130,60"></polygon></svg>
+        </div>
+
+        <article class="stage generate">
+          <div class="stage-num">Step 04</div>
+          <div class="stage-title">成文与视频准备</div>
+          <p class="stage-subtitle">把选中新闻变成可发布的图文和视频素材。</p>
+          <div class="card-list">
+            <div class="mini-card">
+              <strong>分组生成文章</strong>
+              <span>按分类组成上下文，调用 <code>generateArticleEntries()</code> 生成标题、正文、中文点评句和来源链接。</span>
+            </div>
+            <div class="mini-card">
+              <strong>质量校验</strong>
+              <span>检查中文点评、3 个编号要点、来源链接保留、段落长度、乱码、标题重复、证据追溯。</span>
+            </div>
+            <div class="mini-card">
+              <strong>文本渲染</strong>
+              <span>渲染通用日报 Markdown、知乎 Markdown、微信公众号 HTML。</span>
+            </div>
+            <div class="mini-card">
+              <strong>视频链路</strong>
+              <span>生成口播脚本、TTS 音频、字幕 SRT、时间线、视频帧 HTML/PNG，再由 ffmpeg 或 mock composer 合成。</span>
+            </div>
+          </div>
+        </article>
+
+        <div class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 160 90"><path d="M10 45 H130"></path><polygon points="130,30 155,45 130,60"></polygon></svg>
+        </div>
+
+        <article class="stage output">
+          <div class="stage-num">Step 05</div>
+          <div class="stage-title">输出</div>
+          <p class="stage-subtitle">写入本地文件、数据库运行记录和平台分发包。</p>
+          <div class="card-list">
+            <div class="mini-card">
+              <strong>图文稿件</strong>
+              <span><code>daily-report.md</code>、<code>daily.md</code>、<code>zhihu.md</code>、<code>wechat.html</code>。</span>
+            </div>
+            <div class="mini-card">
+              <strong>审计与运行记录</strong>
+              <span><code>audit/editorial-selection-audit.json</code>、<code>pipeline-run.json</code>、数据库 <code>pipeline_runs</code>/<code>generated_outputs</code>。</span>
+            </div>
+            <div class="mini-card">
+              <strong>视频产物</strong>
+              <span><code>subtitles.srt</code>、<code>frames/html/*.html</code>、<code>frames/png/*.png</code>、<code>video-plan.json</code>、<code>daily.mp4</code>、<code>video-composition-audit.json</code>。</span>
+            </div>
+            <div class="mini-card">
+              <strong>分发包</strong>
+              <span><code>distribution/manifest.json</code> 以及 Bilibili、YouTube、微信、知乎、小红书、抖音的 <code>metadata.json</code>。</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <h2>具体输入信源</h2>
+        <div class="source-grid">
+          <div class="source-group">
+            <h3>AI 原生信源 <span class="badge">3</span></h3>
+            <div class="source"><div><div class="source-name">X AI company accounts</div><div class="source-meta">高价值 AI 公司、实验室和产品团队社交动态</div></div><span class="strategy">x_social</span></div>
+            <div class="source"><div><div class="source-name">AI company blogs</div><div class="source-meta">官方模型、产品、平台、政策更新</div></div><span class="strategy">rss</span></div>
+            <div class="source"><div><div class="source-name">Open-source AI project releases</div><div class="source-meta">开源模型、Agent、开发者工具发布</div></div><span class="strategy">rsshub</span></div>
+          </div>
+
+          <div class="source-group">
+            <h3>AI x 游戏信源 <span class="badge">3</span></h3>
+            <div class="source"><div><div class="source-name">GameLook AI</div><div class="source-meta">直接关注 AI 与游戏产业交叉报道</div></div><span class="strategy">rss</span></div>
+            <div class="source"><div><div class="source-name">Game company AI announcements</div><div class="source-meta">游戏公司 AI 工具、战略、合作、组织更新</div></div><span class="strategy">official_site</span></div>
+            <div class="source"><div><div class="source-name">AIGC game startup announcements</div><div class="source-meta">AI NPC、美术、音频、叙事、测试、发行、营销创业公司动态</div></div><span class="strategy">official_site</span></div>
+          </div>
+
+          <div class="source-group">
+            <h3>游戏媒体/社区信源 <span class="badge">9</span></h3>
+            <div class="source"><div><div class="source-name">GameLook</div><div class="source-meta">行业、公司、商业化与分析报道</div></div><span class="strategy">rss</span></div>
+            <div class="source"><div><div class="source-name">机核</div><div class="source-meta">社区影响力强的编辑内容与新闻列表</div></div><span class="strategy">web_page</span></div>
+            <div class="source"><div><div class="source-name">触乐</div><div class="source-meta">高质量文章、行业观察、Daily 列表</div></div><span class="strategy">web_page</span></div>
+            <div class="source"><div><div class="source-name">游戏陀螺</div><div class="source-meta">行业、发行、商业动态</div></div><span class="strategy">json_api</span></div>
+            <div class="source"><div><div class="source-name">游戏茶馆</div><div class="source-meta">偏从业者视角的行业观察</div></div><span class="strategy">rss</span></div>
+            <div class="source"><div><div class="source-name">游民星空</div><div class="source-meta">大流量游戏新闻雷达，过滤 AI 或行业信号</div></div><span class="strategy">json_api</span></div>
+            <div class="source"><div><div class="source-name">游研社</div><div class="source-meta">趋势和讨论信号较强的高质量内容</div></div><span class="strategy">rss</span></div>
+            <div class="source"><div><div class="source-name">罗斯基</div><div class="source-meta">补充来源，当前保留为社区提交</div></div><span class="strategy">community_submission</span></div>
+            <div class="source"><div><div class="source-name">3DM</div><div class="source-meta">高噪声大流量新闻，仅保留 AI/引擎开发相关信号</div></div><span class="strategy">web_page</span></div>
+          </div>
+
+          <div class="source-group">
+            <h3>手动/社区信源 <span class="badge">3</span></h3>
+            <div class="source"><div><div class="source-name">游戏葡萄</div><div class="source-meta">高质量行业深度，主要来自微信公众号手动录入</div></div><span class="strategy">manual_markdown</span></div>
+            <div class="source"><div><div class="source-name">WeChat manual clips</div><div class="source-meta">微信、投稿、评论、私信、社区线索的 Markdown 入口</div></div><span class="strategy">manual_markdown</span></div>
+            <div class="source"><div><div class="source-name">Developer community submissions</div><div class="source-meta">开发者帖子和读者线索，补 RSS/网页采集缺口</div></div><span class="strategy">community_submission</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>处理阶段与输出位置</h2>
+        <div class="table-like">
+          <div class="row">
+            <strong>采集 collect</strong>
+            <span>读取信源注册表，调用对应采集器，标准化字段，写入 <code>data/news-daily.sqlite</code> 的 <code>sources</code>/<code>raw_items</code>，并记录采集失败。</span>
+          </div>
+          <div class="row">
+            <strong>筛选 screen</strong>
+            <span>从数据库拉取待处理 raw item，AI 生成摘要/关键词/分类/分数，保存到 <code>processed_items</code>，并写 <code>processing_audits</code>。</span>
+          </div>
+          <div class="row">
+            <strong>选题 select</strong>
+            <span>按重复组、来源权重、新鲜度、证据追溯、每日条数和分类配额挑选 selected item，输出 <code>output/{date}/audit/editorial-selection-audit.json</code>。</span>
+          </div>
+          <div class="row">
+            <strong>成文 generate-article</strong>
+            <span>按分类分组调用 AI，生成可发布标题、3 点正文、中文点评和来源链接；失败会直接报错，避免无证据内容流入发布稿。</span>
+          </div>
+          <div class="row">
+            <strong>图文 render-text</strong>
+            <span>输出 <code>output/{date}/daily-report.md</code>、<code>daily.md</code>、<code>zhihu.md</code>、<code>wechat.html</code>。</span>
+          </div>
+          <div class="row">
+            <strong>视频 plan/render/compose</strong>
+            <span>生成 <code>subtitles.srt</code>、音频、时间线、<code>frames/html</code>、<code>frames/png</code>、<code>video-plan.json</code>、<code>daily.mp4</code> 和合成审计 JSON。</span>
+          </div>
+          <div class="row">
+            <strong>分发 prepare-distribution</strong>
+            <span>为 <code>bilibili</code>、<code>youtube</code>、<code>wechat</code>、<code>zhihu</code>、<code>xiaohongshu</code>、<code>douyin</code> 生成本地 <code>metadata.json</code> 和总 <code>manifest.json</code>，不自动上传平台。</span>
+          </div>
+          <div class="row">
+            <strong>运行记录</strong>
+            <span>最终写 <code>output/{date}/pipeline-run.json</code>，同时在 SQLite 中保存 pipeline run、generated outputs、处理审计和已处理条目。</span>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

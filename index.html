@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智游镜 | AI + 游戏情报每日简报 & 每周精选</title>
+  <!-- 引入样式表 -->
+  <link rel="stylesheet" href="display/css/style.css">
+</head>
+<body>
+  <!-- 顶部科技渐变条 -->
+  <div class="top-decor"></div>
+
+  <div class="app-container">
+    <!-- Header 头部 -->
+    <header class="app-header">
+      <div class="header-logo-section">
+        <div class="logo-icon">
+          <!-- 智游镜雷达 Logo 图标 -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            <path d="M2 12h20"></path>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>智游镜 | AI + 游戏情报站</h1>
+          <p>智能过滤、自动化研判、多模态分发，重塑游戏行业投研工作流</p>
+        </div>
+      </div>
+      <div class="header-meta">
+        <div class="status-tag">
+          <span class="pulse-dot"></span>
+          <span>系统正常运行中</span>
+        </div>
+        <a href="project-flow.html" target="_blank" class="flowchart-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span>查看项目流程图</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- 交互控制卡片 -->
+    <main class="control-panel">
+      <!-- 报告类型 Tab 容器 -->
+      <div id="tab-container"></div>
+      
+      <!-- 日期按钮容器 -->
+      <div id="date-container"></div>
+    </main>
+
+    <!-- 报告内容展示区 -->
+    <section id="viewer-container"></section>
+
+    <!-- 页脚 -->
+    <footer class="app-footer">
+      <p>© 2026 智游镜系统 (Testground). All rights reserved.</p>
+      <p>由 AI + 游戏情报分析 Pipeline 自动构建与发布 | <a href="https://github.com" target="_blank">GitHub Repository</a></p>
+    </footer>
+  </div>
+
+  <!-- 引入模块化入口 JavaScript -->
+  <script type="module" src="display/js/main.js"></script>
+</body>
+</html>
