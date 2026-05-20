@@ -353,7 +353,7 @@ export class NewsRepository {
       INSERT INTO processed_items (
         id, raw_item_id, source_url, source_name, source_type, source_weight,
         published_at, collected_at, raw_content, summary, keywords, category,
-        score, news_value_score, duplicate_of, selected, official_sources, article_title,
+        score, news_value_score, duplicate_of, selected, is_mock, official_sources, article_title,
         article_body, intro_summary, assets, script_segments, tts_segments,
         timeline, subtitle_srt, ai_relevance_score, game_relevance_score,
         cross_relevance_score, ai_tags, game_tags, is_topic_candidate,
@@ -362,7 +362,7 @@ export class NewsRepository {
       VALUES (
         @id, @rawItemId, @sourceUrl, @sourceName, @sourceType, @sourceWeight,
         @publishedAt, @collectedAt, @rawContent, @summary, @keywords, @category,
-        @score, @newsValueScore, @duplicateOf, @selected, @officialSources, @articleTitle,
+        @score, @newsValueScore, @duplicateOf, @selected, @isMock, @officialSources, @articleTitle,
         @articleBody, @introSummary, @assets, @scriptSegments, @ttsSegments,
         @timeline, @subtitleSrt, @aiRelevanceScore, @gameRelevanceScore,
         @crossRelevanceScore, @aiTags, @gameTags, @isTopicCandidate,
@@ -384,6 +384,7 @@ export class NewsRepository {
         news_value_score = excluded.news_value_score,
         duplicate_of = excluded.duplicate_of,
         selected = excluded.selected,
+        is_mock = excluded.is_mock,
         official_sources = excluded.official_sources,
         article_title = excluded.article_title,
         article_body = excluded.article_body,
@@ -406,6 +407,7 @@ export class NewsRepository {
       rawItemId: item.rawItemId ?? null,
       keywords: stringifyJson(next.keywords),
       selected: boolToInt(next.selected),
+      isMock: boolToInt(next.isMock ?? false),
       officialSources: stringifyJson(next.officialSources),
       assets: stringifyJson(next.assets),
       scriptSegments: stringifyJson(next.scriptSegments),
@@ -469,10 +471,11 @@ export class NewsRepository {
     return rows.map(mapProcessedItem);
   }
 
-  listWeeklyCandidates(startDate: string, endDate: string, limit = 9): NewsItem[] {
+  listWeeklyCandidates(startDate: string, endDate: string, limit = 9, includeMock = false): NewsItem[] {
     const rows = this.db.prepare(`
       SELECT * FROM processed_items
       WHERE selected = 1
+        AND (@includeMock = 1 OR is_mock = 0)
         AND duplicate_of IS NULL
         AND (
           (published_at >= @startDate AND published_at <= @endDate)
@@ -481,7 +484,7 @@ export class NewsRepository {
         )
       ORDER BY score DESC, source_weight DESC, published_at DESC
       LIMIT @limit
-    `).all({ startDate, endDate, limit }) as ProcessedItemRow[];
+    `).all({ startDate, endDate, limit, includeMock: boolToInt(includeMock) }) as ProcessedItemRow[];
 
     return rows.map(mapProcessedItem);
   }
@@ -652,6 +655,7 @@ export function initializeDatabase(db: Database.Database): void {
       news_value_score REAL NOT NULL DEFAULT 0,
       duplicate_of TEXT REFERENCES processed_items(id),
       selected INTEGER NOT NULL DEFAULT 0,
+      is_mock INTEGER NOT NULL DEFAULT 0,
       official_sources TEXT NOT NULL DEFAULT '[]',
       article_title TEXT NOT NULL DEFAULT '',
       article_body TEXT NOT NULL DEFAULT '',
@@ -726,7 +730,10 @@ export function initializeDatabase(db: Database.Database): void {
 
   addColumnIfMissing(db, "raw_items", "duplicate_of", "TEXT");
   addColumnIfMissing(db, "processed_items", "news_value_score", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "processed_items", "is_mock", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "processed_items", "exclusion_reason", "TEXT NOT NULL DEFAULT ''");
+  db.prepare("UPDATE processed_items SET is_mock = 1 WHERE id LIKE 'mock-%'").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_processed_items_weekly ON processed_items(selected, is_mock, published_at, collected_at)").run();
 
   db.prepare(`
     INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
@@ -753,6 +760,7 @@ function defaultNewsItem(id: string): NewsItem {
       newsValueScore: 0,
       duplicateOf: null,
     selected: false,
+    isMock: false,
     officialSources: [],
     articleTitle: "",
     articleBody: "",
@@ -820,6 +828,7 @@ function mapProcessedItem(row: ProcessedItemRow): NewsItem {
     newsValueScore: row.news_value_score,
     duplicateOf: row.duplicate_of,
     selected: intToBool(row.selected),
+    isMock: intToBool(row.is_mock),
     officialSources: parseJson(row.official_sources, []),
     articleTitle: row.article_title,
     articleBody: row.article_body,
@@ -970,6 +979,7 @@ interface ProcessedItemRow {
   news_value_score: number;
   duplicate_of: string | null;
   selected: number;
+  is_mock: number;
   official_sources: string;
   article_title: string;
   article_body: string;

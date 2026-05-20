@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AppConfig } from "../config/env.js";
-import { openNewsRepository } from "../db/newsRepository.js";
+import { openNewsRepository, type NewsRepository } from "../db/newsRepository.js";
 import { renderWeeklyMarkdown, renderWeeklyHtml } from "../render/markdownRenderer.js";
 import type { NewsItem } from "./types.js";
 
@@ -37,8 +37,15 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
   const limit = options.limit ?? 9;
 
   try {
-    // 1. 获取本 ISO 周内所有被日报采纳的新闻并选分数 top 9
-    const selectedItems = repository.listWeeklyCandidates(week.startDateStr, week.endDateStr, limit);
+    // 1. 周报只聚合本 ISO 周各日报审计中实际采纳的条目，避免数据库历史 selected 状态串入。
+    const selectedItems = await listWeeklyItemsFromDailyAudits(
+      repository,
+      config.OUTPUT_DIR,
+      week.startDateStr,
+      week.endDateStr,
+      limit,
+      config.MOCK_MODE
+    );
 
     // 2. 组装并渲染周报内容 (Markdown 和 HTML)
     const weeklyTitle = `智游镜 | 每周AI游戏新闻速递 ${week.weekKey}`;
@@ -160,6 +167,141 @@ function formatIsoWeekKey(weekStart: Date): string {
 
   const weekNumber = Math.floor((weekStart.getTime() - weekOneStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
   return `${weekYear}-W${String(weekNumber).padStart(2, "0")}`;
+}
+
+async function listWeeklyItemsFromDailyAudits(
+  repository: NewsRepository,
+  outputRoot: string,
+  startDate: string,
+  endDate: string,
+  limit: number,
+  includeMock: boolean
+): Promise<NewsItem[]> {
+  const candidates = new Map<string, NewsItem>();
+
+  for (const date of eachDate(startDate, endDate)) {
+    const audit = await readDailySelectionAudit(join(outputRoot, date, "audit", "editorial-selection-audit.json"));
+    if (!audit) {
+      continue;
+    }
+
+    for (const entry of audit.selected) {
+      const persisted = repository.getProcessedItem(entry.id);
+      if (persisted?.isMock && !includeMock) {
+        continue;
+      }
+
+      const item = persisted ? { ...persisted, selected: true } : auditEntryToNewsItem(entry, audit.generatedAt);
+      candidates.set(item.id, item);
+    }
+  }
+
+  return [...candidates.values()]
+    .sort(compareWeeklyItems)
+    .slice(0, limit);
+}
+
+async function readDailySelectionAudit(path: string): Promise<DailySelectionAudit | null> {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as DailySelectionAudit;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function auditEntryToNewsItem(entry: DailySelectionAuditEntry, generatedAt: string): NewsItem {
+  const publishedAt = estimatePublishedAt(generatedAt, entry.evidence.freshnessHours);
+  const summary = `${entry.title} 入选当日日报。`;
+
+  return {
+    id: entry.id,
+    sourceUrl: entry.sourceUrl,
+    sourceName: entry.sourceName,
+    sourceType: "ai_game_media",
+    sourceWeight: entry.evidence.sourceWeight,
+    publishedAt,
+    collectedAt: generatedAt,
+    rawContent: summary,
+    summary,
+    keywords: [],
+    category: entry.category || entry.evidence.category || "AI x Game",
+    score: entry.evidence.score,
+    newsValueScore: entry.evidence.score,
+    duplicateOf: null,
+    selected: true,
+    isMock: false,
+    officialSources: entry.evidence.officialSources.length > 0 ? entry.evidence.officialSources : [entry.sourceUrl],
+    articleTitle: entry.title,
+    articleBody: summary,
+    introSummary: summary,
+    assets: [],
+    scriptSegments: [],
+    ttsSegments: [],
+    timeline: [],
+    subtitleSrt: "",
+    aiRelevanceScore: entry.evidence.score,
+    gameRelevanceScore: entry.evidence.score,
+    crossRelevanceScore: entry.evidence.score,
+    aiTags: [],
+    gameTags: [],
+    isTopicCandidate: true,
+    exclusionReason: ""
+  };
+}
+
+function estimatePublishedAt(generatedAt: string, freshnessHours: number | null): string {
+  if (freshnessHours === null) {
+    return generatedAt;
+  }
+  const generatedTime = Date.parse(generatedAt);
+  if (!Number.isFinite(generatedTime)) {
+    return generatedAt;
+  }
+  return new Date(generatedTime - freshnessHours * 3_600_000).toISOString();
+}
+
+function eachDate(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(startDate);
+  const end = new Date(endDate);
+  cursor.setUTCHours(0, 0, 0, 0);
+  end.setUTCHours(0, 0, 0, 0);
+
+  while (cursor.getTime() <= end.getTime()) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+function compareWeeklyItems(left: NewsItem, right: NewsItem): number {
+  return right.score - left.score
+    || right.sourceWeight - left.sourceWeight
+    || Date.parse(right.publishedAt) - Date.parse(left.publishedAt);
+}
+
+interface DailySelectionAudit {
+  generatedAt: string;
+  selected: DailySelectionAuditEntry[];
+}
+
+interface DailySelectionAuditEntry {
+  id: string;
+  title: string;
+  category: string;
+  sourceName: string;
+  sourceUrl: string;
+  evidence: {
+    score: number;
+    sourceWeight: number;
+    freshnessHours: number | null;
+    category: string;
+    officialSources: string[];
+  };
 }
 
 function normalizeGeneratedAt(date?: string): string {

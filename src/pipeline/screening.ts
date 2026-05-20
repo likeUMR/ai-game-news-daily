@@ -167,6 +167,7 @@ function newsItemFromRaw(rawItem: PendingRawItem): NewsItem {
     newsValueScore: 0,
     duplicateOf: rawItem.duplicateOf,
     selected: false,
+    isMock: false,
     officialSources: [],
     articleTitle: title,
     articleBody: "",

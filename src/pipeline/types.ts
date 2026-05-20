@@ -16,6 +16,7 @@ export interface NewsItem {
   newsValueScore: number;
   duplicateOf: string | null;
   selected: boolean;
+  isMock?: boolean;
   officialSources: string[];
   articleTitle: string;
   articleBody: string;

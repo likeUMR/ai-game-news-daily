@@ -49,6 +49,7 @@ function createItem(input: Pick<NewsItem, "id" | "sourceName" | "sourceType" | "
     newsValueScore: 0,
     duplicateOf: null,
     selected: false,
+    isMock: true,
     officialSources: [],
     articleTitle: "",
     articleBody: "",

@@ -109,6 +109,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
             newsValueScore: 0,
             duplicateOf: raw.duplicateOf,
             selected: false,
+            isMock: false,
             officialSources: [],
             articleTitle: title,
             articleBody: "",

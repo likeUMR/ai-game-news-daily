@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -38,6 +38,14 @@ describe("runWeeklyPipeline", () => {
         score: 99
       }));
       repository.saveProcessedFields(createNewsItem({
+        id: "mock-week",
+        articleTitle: "Mock week",
+        publishedAt: "2026-05-20T00:00:00.000Z",
+        collectedAt: "2026-05-20T00:00:00.000Z",
+        score: 100,
+        isMock: true
+      }));
+      repository.saveProcessedFields(createNewsItem({
         id: "week-start",
         articleTitle: "Week start",
         publishedAt: "2026-05-18T00:00:00.000Z",
@@ -54,6 +62,12 @@ describe("runWeeklyPipeline", () => {
     } finally {
       repository.close();
     }
+
+    await writeSelectionAuditFixture(join(config.OUTPUT_DIR, "2026-05-18"), [
+      createAuditEntry("week-start", "Week start", 90),
+      createAuditEntry("week-end", "Week end", 91),
+      createAuditEntry("mock-week", "Mock week", 100)
+    ]);
 
     const first = await runWeeklyPipeline(config, { date: "2026-05-20" });
     const second = await runWeeklyPipeline(config, { date: "2026-05-22" });
@@ -72,6 +86,7 @@ describe("runWeeklyPipeline", () => {
     expect(markdown).toContain("2026\\-W21");
     expect(markdown).toContain("Week end");
     expect(markdown).toContain("Week start");
+    expect(markdown).not.toContain("Mock week");
     expect(markdown).not.toContain("Before week");
   });
 });
@@ -93,6 +108,7 @@ function createNewsItem(overrides: Partial<NewsItem> & Pick<NewsItem, "id">): Ne
     newsValueScore: 80,
     duplicateOf: null,
     selected: true,
+    isMock: false,
     officialSources: [],
     articleTitle: "AI game tooling update",
     articleBody: "AI game tooling update.",
@@ -112,4 +128,33 @@ function createNewsItem(overrides: Partial<NewsItem> & Pick<NewsItem, "id">): Ne
   };
 
   return { ...base, ...overrides, id: overrides.id };
+}
+
+async function writeSelectionAuditFixture(outputDir: string, selected: ReturnType<typeof createAuditEntry>[]): Promise<void> {
+  const auditDir = join(outputDir, "audit");
+  await mkdir(auditDir, { recursive: true });
+  await writeFile(join(auditDir, "editorial-selection-audit.json"), `${JSON.stringify({
+    generatedAt: "2026-05-18T00:00:00.000Z",
+    selected
+  }, null, 2)}\n`, "utf8");
+}
+
+function createAuditEntry(id: string, title: string, score: number) {
+  return {
+    id,
+    title,
+    category: "AI x Game",
+    sourceName: "Test Source",
+    sourceUrl: `https://example.com/${id}`,
+    reasons: ["selected"],
+    evidence: {
+      score,
+      sourceWeight: 80,
+      freshnessHours: 0,
+      category: "AI x Game",
+      sourceUrl: `https://example.com/${id}`,
+      officialSources: [`https://example.com/${id}`],
+      duplicateGroup: id
+    }
+  };
 }
