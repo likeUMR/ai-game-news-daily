@@ -48,6 +48,8 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
   await mkdir(config.OUTPUT_DIR, { recursive: true });
   await mkdir(outputDir, { recursive: true });
   await mkdir(config.DATA_DIR, { recursive: true });
+  const effectiveModelProvider = config.MOCK_MODE ? "mock" : config.MODEL_PROVIDER;
+  console.log(`[pipeline] START run-daily date=${date} mock=${config.MOCK_MODE} provider=${effectiveModelProvider}`);
 
   const repository = openNewsRepository(config.DATABASE_PATH);
   const run = repository.savePipelineRun({
@@ -206,7 +208,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
     const articleResult = await runStage(stages, errors, "generate-article", async () => {
       const generated = await generateArticlesForSelectedItems(
         repository,
-        createAIProvider(config),
+        createAIProvider(config.MOCK_MODE ? { ...config, MODEL_PROVIDER: "mock" } : config),
         selectedItems
       );
       return {
@@ -472,11 +474,13 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
       result: finalResult.pipelineRun
     });
     await writeFile(runPath, `${JSON.stringify(finalResult, null, 2)}\n`, "utf8");
+    console.log(`[pipeline] OK run-daily durationMs=${finalResult.pipelineRun.durationMs} selectedItems=${selectedItems.length}`);
 
     return result;
   } catch (error) {
     const completedAt = new Date().toISOString();
     const message = error instanceof Error ? error.message : String(error);
+    console.error(`[pipeline] FAIL run-daily error=${message}`);
     repository.savePipelineRun({
       id: run.id,
       status: "failed",
@@ -522,32 +526,47 @@ async function runStage<T>(
 ): Promise<T> {
   const startedAt = new Date().toISOString();
   const started = performance.now();
+  console.log(`[pipeline] START ${name}`);
   try {
     const result = await action();
     const completedAt = new Date().toISOString();
+    const durationMs = Math.round(performance.now() - started);
     stages.push({
       name,
       status: "succeeded",
       startedAt,
       completedAt,
-      durationMs: Math.round(performance.now() - started),
+      durationMs,
       summary: result.summary
     });
+    console.log(`[pipeline] OK ${name} durationMs=${durationMs}${formatStageSummary(result.summary)}`);
     return result.value;
   } catch (error) {
     const completedAt = new Date().toISOString();
     const message = error instanceof Error ? error.message : String(error);
+    const durationMs = Math.round(performance.now() - started);
     stages.push({
       name,
       status: "failed",
       startedAt,
       completedAt,
-      durationMs: Math.round(performance.now() - started),
+      durationMs,
       error: message
     });
     errors.push({ stage: name, message });
+    console.error(`[pipeline] FAIL ${name} durationMs=${durationMs} error=${message}`);
     throw error;
   }
+}
+
+function formatStageSummary(summary?: Record<string, unknown>): string {
+  if (!summary) {
+    return "";
+  }
+  const entries = Object.entries(summary)
+    .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+    .map(([key, value]) => `${key}=${String(value)}`);
+  return entries.length > 0 ? ` ${entries.join(" ")}` : "";
 }
 
 function normalizeGeneratedAt(date?: string): string {

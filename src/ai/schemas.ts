@@ -32,7 +32,7 @@ export const articleEntrySchema = z.object({
   title: z.string().min(1),
   body: z.string().min(1),
   category: z.string().min(1),
-  officialSources: z.array(z.string().url()).default([])
+  officialSources: z.array(z.string()).default([])
 });
 
 export const groupedArticleEntrySchema = z.object({
@@ -40,7 +40,7 @@ export const groupedArticleEntrySchema = z.object({
   articleTitle: z.string().min(1),
   articleBody: z.string().min(1),
   introSummary: z.string().min(1),
-  sourceLinks: z.array(z.string().url()).min(1)
+  sourceLinks: z.array(z.string())
 });
 
 export const groupedArticleEntriesSchema = z.object({
@@ -117,3 +117,4 @@ function extractJsonText(raw: string): string {
 
   return trimmed.slice(start, end + 1);
 }
+

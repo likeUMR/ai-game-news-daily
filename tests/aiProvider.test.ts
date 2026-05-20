@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { MockAIProvider, enrichWithProvider } from "../src/ai/mockProvider.js";
 import { OpenAICompatibleProvider } from "../src/ai/openAiCompatibleProvider.js";
 import { createAIProvider } from "../src/ai/providerFactory.js";
-import { AIResponseValidationError, classificationSchema, parseAiJsonResponse } from "../src/ai/schemas.js";
+import { AIResponseValidationError, articleEntrySchema, classificationSchema, groupedArticleEntriesSchema, parseAiJsonResponse } from "../src/ai/schemas.js";
 import type { NewsItem } from "../src/pipeline/types.js";
 
 describe("MockAIProvider", () => {
@@ -76,6 +76,20 @@ describe("AI response validation", () => {
         classificationSchema
       )
     ).toThrow(/schema validation/);
+  });
+
+  test("accepts model-supplied source strings for downstream cleanup", () => {
+    const article = parseAiJsonResponse(
+      "{\"title\":\"t\",\"body\":\"b\",\"category\":\"AI x Game\",\"officialSources\":[\"https://example.com/story\",\"not a url\"]}",
+      articleEntrySchema
+    );
+    const grouped = parseAiJsonResponse(
+      "{\"entries\":[{\"id\":\"item-1\",\"articleTitle\":\"t\",\"articleBody\":\"b\",\"introSummary\":\"点评\",\"sourceLinks\":[\"invalid\",\"https://example.com/source\"]}]}",
+      groupedArticleEntriesSchema
+    );
+
+    expect(article.officialSources).toEqual(["https://example.com/story", "not a url"]);
+    expect(grouped.entries[0]?.sourceLinks).toEqual(["invalid", "https://example.com/source"]);
   });
 });
 

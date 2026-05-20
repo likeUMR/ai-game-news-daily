@@ -34,7 +34,7 @@ More detail: [docs/architecture.md](./docs/architecture.md).
 
 ## Data Flow
 
-`npm run run-daily -- --mock` runs the complete no-human-intervention path. In mock mode it collects deterministic demo items, enriches them with deterministic mock AI, deduplicates, selects verified candidates, renders text outputs, creates mock TTS audio, renders frame HTML/PNG placeholders, writes a mock video artifact, and prepares platform packages.
+`npm run run-daily` runs the complete no-human-intervention path with real collectors and the configured OpenAI-compatible provider. Add `--mock` only when you need deterministic demo data, mock AI, mock TTS, placeholder frames, and a mock video artifact.
 
 Discrete commands also exist for staged operation:
 
@@ -44,21 +44,21 @@ npm run collect
 npm run screen
 npm run generate-article
 npm run render-text
-npm run run-daily -- --mock
+npm run run-daily
 ```
 
 Useful options:
 
 ```bash
-npm run run-daily -- --mock --date 2026-05-19
-npm run run-daily -- --mock --limit 3
+npm run run-daily -- --date 2026-05-19
+npm run run-daily -- --limit 3
 npm run run-daily -- --config .env
 ```
 
 Complete unattended command:
 
 ```bash
-npm install && npm run build && npm test && npm run run-daily -- --mock --date 2026-05-19
+npm install && npm run build && npm test && npm run run-daily -- --date 2026-05-19
 ```
 
 ## Source Registry
@@ -73,7 +73,7 @@ Sources are defined in `src/config/sourceRegistry.ts` and validated at startup. 
 - `collection_strategy`: `rss`, `rsshub`, `web_page`, `x_social`, `manual_markdown`, `official_site`, or `community_submission`
 - collection frequency and per-source item caps
 
-Current mock pipeline execution uses `collectMockNews`/demo data for full-run determinism. The `collect`/`ingest` command uses `DemoCollector` and `MarkdownCollector` in mock mode, and RSS, web page, and manual Markdown collectors when `MOCK_MODE=false`. Manual Markdown files are read from `data/manual`.
+Real pipeline execution uses RSS, JSON API, web page, and manual Markdown collectors when `MOCK_MODE=false`. Mock execution uses `collectMockNews`/demo data for full-run determinism. Manual Markdown files are read from `data/manual`.
 
 Policy details: [docs/source-policy.md](./docs/source-policy.md).
 
@@ -103,14 +103,14 @@ Copy [.env.example](./.env.example) to `.env` for local overrides.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `MOCK_MODE` | `true` | Enables deterministic local behavior. The full `run-daily` pipeline currently requires `true`. |
+| `MOCK_MODE` | `false` | Enables real collection and provider-backed generation by default. Set `true` only for deterministic local behavior. |
 | `APP_ROOT` | current working directory | Root used to resolve data/output paths. |
 | `OUTPUT_DIR` | `output` | Generated artifacts. |
 | `DATA_DIR` | `data` | Runtime data and manual Markdown intake. |
 | `DATABASE_PATH` | `data/news-daily.sqlite` | SQLite database path. |
 | `COLLECTION_WINDOW_HOURS` | `24` | Intended collection recency window. |
 | `DEDUPE_WINDOW_HOURS` | `72` | Recent-item dedupe window for collection. |
-| `MODEL_PROVIDER` | `mock` | `mock` or `openai` for implemented AI providers. |
+| `MODEL_PROVIDER` | `openai` | `mock` or `openai` for implemented AI providers. |
 | `OPENAI_COMPATIBLE_API_KEY` | unset | API key for OpenAI-compatible relay. |
 | `OPENAI_API_KEY` | unset | Fallback key for OpenAI default API. |
 | `OPENAI_COMPATIBLE_BASE_URL` | relay default when compatible key is used | Base URL for `/chat/completions`. |
@@ -193,19 +193,18 @@ npm run schedule:daily:example
 Cron example:
 
 ```cron
-0 8 * * * cd /path/to/ai-game-news-daily && npm run run-daily -- --mock
+0 8 * * * cd /path/to/ai-game-news-daily && npm run run-daily
 ```
 
 Windows Task Scheduler action:
 
 ```text
 Program/script: powershell
-Arguments: -NoProfile -ExecutionPolicy Bypass -Command "Set-Location 'C:\path\to\ai-game-news-daily'; npm run run-daily -- --mock"
+Arguments: -NoProfile -ExecutionPolicy Bypass -Command "Set-Location 'C:\path\to\ai-game-news-daily'; npm run run-daily"
 ```
 
 ## Troubleshooting
 
-- `Only MOCK_MODE=true is implemented in the initial scaffold.`: the full `run-daily` pipeline is currently mock-only. Use `--mock` or set `MOCK_MODE=true`.
 - `MODEL_PROVIDER=openai requires OPENAI_COMPATIBLE_API_KEY or OPENAI_API_KEY.`: configure an API key or use `MODEL_PROVIDER=mock`.
 - `TTS_PROVIDER=... requires TTS_HTTP_ENDPOINT`: non-mock TTS requires the generic HTTP adapter endpoint.
 - No selected items: lower thresholds, confirm source weights, check `audit/editorial-selection-audit.json`, and verify item dates are within `SELECTION_FRESHNESS_HOURS`.

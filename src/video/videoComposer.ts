@@ -51,8 +51,13 @@ export async function createVideoComposer(options: {
     return new MockVideoComposer("ffmpeg disabled by composer selection");
   }
 
-  if (force === "ffmpeg" || await isFfmpegAvailable(ffmpegPath)) {
-    return new FfmpegVideoComposer(ffmpegPath, options.executor ?? defaultExecutor);
+  const ffmpegComposer = new FfmpegVideoComposer(ffmpegPath, options.executor ?? defaultExecutor);
+  if (force === "ffmpeg") {
+    return ffmpegComposer;
+  }
+
+  if (await isFfmpegAvailable(ffmpegPath)) {
+    return new AutoFallbackVideoComposer(ffmpegComposer);
   }
 
   return new MockVideoComposer("ffmpeg executable was not found; wrote deterministic mock video artifact instead");
@@ -154,6 +159,19 @@ export class MockVideoComposer implements VideoComposer {
       note: this.note,
       missingFrames
     };
+  }
+}
+
+export class AutoFallbackVideoComposer implements VideoComposer {
+  constructor(private readonly primary: VideoComposer) {}
+
+  async compose(input: VideoCompositionInput): Promise<VideoCompositionResult> {
+    try {
+      return await this.primary.compose(input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return new MockVideoComposer(`ffmpeg composition failed: ${message}; wrote deterministic fallback video artifact instead`).compose(input);
+    }
   }
 }
 

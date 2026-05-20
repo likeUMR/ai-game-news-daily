@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import type { TimelineEvent } from "../src/pipeline/types.js";
 import type { VideoFrame } from "../src/video/frameRenderer.js";
 import {
+  AutoFallbackVideoComposer,
   buildFfmpegCommand,
   createVideoComposer,
   FfmpegVideoComposer,
@@ -89,6 +90,22 @@ describe("VideoComposer", () => {
     expect(artifact.missingFrames).toEqual([]);
     expect(subtitles).toContain("00:00:00,000 --> 00:00:01,000");
     expect(audit).toContain("ffmpeg unavailable in test");
+  });
+
+  test("falls back to a deterministic artifact when automatic ffmpeg composition fails", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "news-video-auto-fallback-"));
+    const input = await createCompositionInput(tempDir);
+    const composer = new AutoFallbackVideoComposer({
+      async compose() {
+        throw new Error("ffmpeg exited with code 4294967274");
+      }
+    });
+
+    const result = await composer.compose(input);
+
+    expect(result.mode).toBe("mock");
+    expect(result.note).toContain("ffmpeg composition failed");
+    expect(existsSync(result.videoPath)).toBe(true);
   });
 
   test("fails ffmpeg composition with a clear missing-frame error", async () => {

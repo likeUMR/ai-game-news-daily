@@ -5,14 +5,14 @@ import { describe, expect, test } from "vitest";
 import { loadConfig, loadEnvFiles } from "../src/config/env.js";
 
 describe("loadConfig", () => {
-  test("uses safe defaults for mock mode", () => {
+  test("uses production defaults", () => {
     const config = loadConfig({
       NODE_ENV: "test",
       APP_ROOT: "C:\\tmp\\news-daily-test"
     });
 
-    expect(config.MOCK_MODE).toBe(true);
-    expect(config.MODEL_PROVIDER).toBe("mock");
+    expect(config.MOCK_MODE).toBe(false);
+    expect(config.MODEL_PROVIDER).toBe("openai");
     expect(config.TTS_PROVIDER).toBe("mock");
     expect(config.COLLECTION_WINDOW_HOURS).toBe(24);
     expect(config.DEDUPE_WINDOW_HOURS).toBe(72);
