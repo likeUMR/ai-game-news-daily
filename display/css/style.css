@@ -572,16 +572,19 @@ body {
   bottom: 18px;
   z-index: 50;
   width: 300px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
   color: #172033;
-  transition: width 0.28s ease, transform 0.28s ease, box-shadow 0.28s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 
 .sidebar.is-collapsed {
-  width: 52px;
+  transform: translateX(calc(-100% - 18px));
+  box-shadow: none;
 }
 
 .sidebar-content {
@@ -603,27 +606,34 @@ body {
 
 .sidebar-toggle {
   position: absolute;
-  top: 18px;
+  top: 24px;
   right: -18px;
-  z-index: 2;
+  z-index: 51;
   width: 36px;
   height: 36px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 50%;
   background: #ffffff;
   color: #334155;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
   cursor: pointer;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
-  display: grid;
-  place-items: center;
-  transition: var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s, color 0.2s, right 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 
 .sidebar-toggle:hover {
   color: var(--primary-color);
-  transform: translateX(1px);
+  background-color: #f8fafc;
+  transform: scale(1.05);
+}
+
+.sidebar.is-collapsed .sidebar-toggle {
+  right: -54px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
 }
 
 .toggle-closed {
@@ -849,10 +859,13 @@ body {
     left: 10px;
     bottom: 10px;
     width: min(300px, calc(100vw - 30px));
+    border-radius: 20px;
   }
 
   .sidebar.is-collapsed {
-    width: 50px;
+    transform: translateX(calc(-100% - 10px));
+    width: min(300px, calc(100vw - 30px));
+    box-shadow: none;
   }
 
   .sidebar-content {
@@ -860,6 +873,11 @@ body {
   }
 
   .sidebar-toggle {
-    right: -16px;
+    top: 20px;
+    right: -18px;
+  }
+
+  .sidebar.is-collapsed .sidebar-toggle {
+    right: -46px;
   }
 }
