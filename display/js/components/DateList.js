@@ -25,9 +25,21 @@ export class DateListComponent {
   setType(type) {
     if (this.currentType !== type) {
       this.currentType = type;
+      // 如果 selectedDate 为空（例如此前看了流程图被 deselect），恢复为最新日期
+      if (!this.selectedDate) {
+        this.selectedDate = this.dates[0].value;
+      }
       this.render();
       this.checkAllFiles();
     }
+  }
+
+  /**
+   * 取消当前日期按钮的选中高亮状态
+   */
+  deselect() {
+    this.selectedDate = null;
+    this.render();
   }
 
   /**

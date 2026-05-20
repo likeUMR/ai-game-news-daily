@@ -11,6 +11,24 @@ export class ViewerComponent {
   }
 
   /**
+   * 直接加载指定 URL (例如流程图页面)
+   * @param {string} url 
+   */
+  loadUrl(url) {
+    const loader = this.container.querySelector('.viewer-loader');
+    const iframe = this.container.querySelector('.viewer-iframe');
+    const emptyState = this.container.querySelector('.viewer-empty');
+    
+    // 显示 Loading，隐藏 iframe 和空状态
+    loader.classList.add('visible');
+    iframe.classList.remove('visible');
+    emptyState.classList.remove('visible');
+    
+    this.currentUrl = url;
+    iframe.src = url;
+  }
+
+  /**
    * 加载指定类型和日期的报告
    * @param {string} type 'daily' | 'weekly'
    * @param {string} date 'YYYY-MM-DD'

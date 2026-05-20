@@ -32,15 +32,16 @@
         </div>
       </header>
 
-      <div class="sidebar-status">
-        <div class="status-tag">
-          <span class="pulse-dot"></span>
-          <span>系统正常运行中</span>
-        </div>
-      </div>
+      <section class="control-panel" aria-label="报告筛选">
+        <!-- 报告类型 Tab 容器 -->
+        <div id="tab-container"></div>
+
+        <!-- 日期按钮容器 -->
+        <div id="date-container"></div>
+      </section>
 
       <nav class="sidebar-actions" aria-label="快捷操作">
-        <a href="project-flow.html" target="_blank" class="flowchart-btn">
+        <a href="#" class="flowchart-btn" id="flowchart-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
             <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
             <polyline points="2 17 12 22 22 17"></polyline>
@@ -49,14 +50,6 @@
           <span>查看项目流程图</span>
         </a>
       </nav>
-
-      <section class="control-panel" aria-label="报告筛选">
-        <!-- 报告类型 Tab 容器 -->
-        <div id="tab-container"></div>
-
-        <!-- 日期按钮容器 -->
-        <div id="date-container"></div>
-      </section>
 
       <footer class="app-footer">
         <p>© 2026 智游镜系统</p>

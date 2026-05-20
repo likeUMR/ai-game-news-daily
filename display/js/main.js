@@ -20,6 +20,19 @@ class App {
     // 2. 初始化 DateList 日期选择区
     this.dateList = new DateListComponent('date-container', (dateStr) => {
       this.currentDate = dateStr;
+      
+      // 如果当前没有 type（例如此前点击了流程图），切回默认 type
+      if (!this.currentType) {
+        this.currentType = CONFIG.defaultType;
+        this.tab.setType(CONFIG.defaultType);
+      }
+      
+      // 移除流程图的高亮
+      const flowchartBtn = document.getElementById('flowchart-btn');
+      if (flowchartBtn) {
+        flowchartBtn.classList.remove('active');
+      }
+
       this.updateReport();
     });
     
@@ -30,10 +43,23 @@ class App {
     this.tab = new TabComponent('tab-container', (type) => {
       this.currentType = type;
       this.dateList.setType(type); // 日期组件切换类型，检查可用性
+      
+      // 同步更新 currentDate
+      this.currentDate = this.dateList.selectedDate;
+
+      // 移除流程图的高亮
+      const flowchartBtn = document.getElementById('flowchart-btn');
+      if (flowchartBtn) {
+        flowchartBtn.classList.remove('active');
+      }
+
       this.updateReport();
     });
 
-    // 4. 初次加载报告
+    // 4. 初始化项目流程图按钮事件
+    this.initFlowchart();
+
+    // 5. 初次加载报告
     this.updateReport();
   }
 
@@ -44,6 +70,28 @@ class App {
     if (this.currentType && this.currentDate) {
       this.viewer.loadReport(this.currentType, this.currentDate);
     }
+  }
+
+  initFlowchart() {
+    const flowchartBtn = document.getElementById('flowchart-btn');
+    if (!flowchartBtn) return;
+
+    flowchartBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      // 1. 设置自身高亮
+      flowchartBtn.classList.add('active');
+
+      // 2. 取消 Tab 和 DateList 的高亮及选中值
+      this.tab.deselect();
+      this.dateList.deselect();
+
+      this.currentType = null;
+      this.currentDate = null;
+
+      // 3. 让 Viewer 载入流程图
+      this.viewer.loadUrl('project-flow.html');
+    });
   }
 
   initSidebar() {

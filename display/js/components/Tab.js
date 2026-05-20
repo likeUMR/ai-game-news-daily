@@ -25,6 +25,14 @@ export class TabComponent {
   }
 
   /**
+   * 取消当前 Tab 的选中高亮状态
+   */
+  deselect() {
+    this.currentType = null;
+    this.render();
+  }
+
+  /**
    * 渲染 Tab
    */
   render() {
