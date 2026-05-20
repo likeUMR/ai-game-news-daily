@@ -74,6 +74,7 @@ describe("renderDailyMarkdown", () => {
         sourceName: "Bad <Feed>",
         sourceUrl: "javascript:alert(1)",
         officialSources: ["https://safe.example.com/a?x=<tag>"],
+        publishedAt: "2026-05-19T08:37:42.000Z",
         introSummary: "Summary & details",
         articleBody: "Body with **bold** and `code`.\n\n```html\n<script>alert(1)</script>\n```\n\n| Key | Value |\n| --- | --- |\n| <x> | & |"
       })
@@ -86,6 +87,7 @@ describe("renderDailyMarkdown", () => {
     expect(html).not.toContain("javascript:alert");
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("Published: 2026-05-19 08:37 | Score: 90");
     expect(html).toContain("style=");
   });
 });

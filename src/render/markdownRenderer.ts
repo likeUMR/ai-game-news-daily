@@ -156,7 +156,7 @@ export function renderWeChatHtml(items: NewsItem[], generatedAt: string, options
       body.push(
         `<h3 style="${h3Style}">${escapeHtml(item.articleTitle)}</h3>`,
         `<p style="${summaryStyle}"><strong>\u70b9\u8bc4\uff1a</strong> ${escapeHtml(firstNonEmpty(item.introSummary, item.summary))}</p>`,
-        `<p style="${mutedStyle}">Published: ${escapeHtml(formatDateTimeToHour(item.publishedAt))} | Score: ${escapeHtml(String(item.crossRelevanceScore))}</p>`,
+        `<p style="${mutedStyle}">Published: ${escapeHtml(formatDateTimeToMinute(item.publishedAt))} | Score: ${escapeHtml(String(item.crossRelevanceScore))}</p>`,
         renderMarkdownSubsetToHtml(item.articleBody),
         `<p style="${sourceStyle}"><strong>Sources:</strong> ${sourceLinks(item).map(renderHtmlLink).join(" ")}</p>`
       );
@@ -264,7 +264,7 @@ export function renderWeeklyHtml(items: NewsItem[], generatedAt: string, startDa
       body.push(
         `<h3 style="${h3Style}">${escapeHtml(item.articleTitle)}</h3>`,
         `<p style="${summaryStyle}"><strong>点评：</strong> ${escapeHtml(firstNonEmpty(item.introSummary, item.summary))}</p>`,
-        `<p style="${mutedStyle}">Published: ${escapeHtml(formatDateTimeToHour(item.publishedAt))} | Score: ${escapeHtml(String(item.crossRelevanceScore))}</p>`,
+        `<p style="${mutedStyle}">Published: ${escapeHtml(formatDateTimeToMinute(item.publishedAt))} | Score: ${escapeHtml(String(item.crossRelevanceScore))}</p>`,
         renderMarkdownSubsetToHtml(item.articleBody),
         `<p style="${sourceStyle}"><strong>Sources:</strong> ${sourceLinks(item).map(renderHtmlLink).join(" ")}</p>`
       );
@@ -377,13 +377,13 @@ function formatDateTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
-function formatDateTimeToHour(value: string): string {
+function formatDateTimeToMinute(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return `${date.toISOString().slice(0, 13).replace("T", " ")}:00`;
+  return date.toISOString().slice(0, 16).replace("T", " ");
 }
 
 function slugify(value: string): string {
