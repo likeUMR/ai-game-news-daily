@@ -798,6 +798,19 @@ body {
   color: #64748b;
 }
 
+.footer-github-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.footer-star-icon {
+  width: 13px;
+  height: 13px;
+  color: #f59e0b;
+}
+
 .report-main {
   width: 100vw;
   height: 100vh;
