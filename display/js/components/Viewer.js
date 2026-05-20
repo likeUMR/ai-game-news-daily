@@ -64,36 +64,18 @@ export class ViewerComponent {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <div class="viewer-card">
-        <!-- 头部工具栏 -->
-        <div class="viewer-header">
-          <div class="viewer-dot-group">
-            <span class="viewer-dot red"></span>
-            <span class="viewer-dot yellow"></span>
-            <span class="viewer-dot green"></span>
-          </div>
-          <div class="viewer-title-address">Report Viewer</div>
-          <button class="viewer-refresh-btn" title="在新窗口打开" id="open-new-window-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
-            </svg>
-          </button>
+      <div class="viewer-body">
+        <!-- Loader -->
+        <div class="viewer-loader visible">
+          <div class="loader-spinner"></div>
+          <p class="loader-text">正在加载报告，请稍候...</p>
         </div>
 
-        <!-- 内容区域 -->
-        <div class="viewer-body">
-          <!-- Loader -->
-          <div class="viewer-loader visible">
-            <div class="loader-spinner"></div>
-            <p class="loader-text">正在为您加载并渲染报告，请稍候...</p>
-          </div>
+        <!-- Empty State -->
+        <div class="viewer-empty"></div>
 
-          <!-- Empty State -->
-          <div class="viewer-empty"></div>
-
-          <!-- Iframe -->
-          <iframe class="viewer-iframe" frameborder="0"></iframe>
-        </div>
+        <!-- Iframe -->
+        <iframe class="viewer-iframe" title="智游镜报告内容" frameborder="0"></iframe>
       </div>
     `;
 
@@ -109,12 +91,5 @@ export class ViewerComponent {
       }
     });
 
-    // 绑定“在新窗口打开”按钮
-    const openBtn = this.container.querySelector('#open-new-window-btn');
-    openBtn.addEventListener('click', () => {
-      if (this.currentUrl) {
-        window.open(this.currentUrl, '_blank');
-      }
-    });
   }
 }

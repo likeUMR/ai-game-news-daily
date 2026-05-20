@@ -12,6 +12,8 @@ class App {
   }
 
   init() {
+    this.initSidebar();
+
     // 1. 初始化 Viewer 展示区
     this.viewer = new ViewerComponent('viewer-container');
 
@@ -42,6 +44,20 @@ class App {
     if (this.currentType && this.currentDate) {
       this.viewer.loadReport(this.currentType, this.currentDate);
     }
+  }
+
+  initSidebar() {
+    const sidebar = document.getElementById('app-sidebar');
+    const toggle = document.getElementById('sidebar-toggle');
+
+    if (!sidebar || !toggle) return;
+
+    toggle.addEventListener('click', () => {
+      const isCollapsed = sidebar.classList.toggle('is-collapsed');
+      sidebar.classList.toggle('is-open', !isCollapsed);
+      toggle.setAttribute('aria-expanded', String(!isCollapsed));
+      toggle.setAttribute('aria-label', isCollapsed ? '展开侧边栏' : '收起侧边栏');
+    });
   }
 }
 
