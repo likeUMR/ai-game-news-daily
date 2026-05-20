@@ -8,6 +8,7 @@ import type { NewsItem } from "./types.js";
 export interface WeeklyPipelineResult {
   generatedAt: string;
   runId: string;
+  weekKey: string;
   startDate: string;
   endDate: string;
   selectedItems: NewsItem[];
@@ -23,35 +24,24 @@ export interface WeeklyPipelineOptions {
 
 export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipelineOptions = {}): Promise<WeeklyPipelineResult> {
   const generatedAt = normalizeGeneratedAt(options.date);
-  const date = generatedAt.slice(0, 10);
-  const outputDir = join(config.OUTPUT_DIR, date);
+  const week = getIsoWeekInfo(generatedAt);
+  const outputDir = join(config.OUTPUT_DIR, "weekly", week.weekKey);
 
   await mkdir(outputDir, { recursive: true });
   await mkdir(config.DATA_DIR, { recursive: true });
 
-  // 计算过去 7 天的时间范围 (包含基准日期在内的 7 天)
-  const end = new Date(generatedAt);
-  end.setUTCHours(23, 59, 59, 999);
-  const endDateStr = end.toISOString();
-
-  const start = new Date(generatedAt);
-  start.setUTCDate(start.getUTCDate() - 6);
-  start.setUTCHours(0, 0, 0, 0);
-  const startDateStr = start.toISOString();
-
-  const displayStartDate = startDateStr.slice(0, 10);
-  const displayEndDate = endDateStr.slice(0, 10);
+  const displayStartDate = week.startDateStr.slice(0, 10);
+  const displayEndDate = week.endDateStr.slice(0, 10);
 
   const repository = openNewsRepository(config.DATABASE_PATH);
   const limit = options.limit ?? 9;
 
   try {
-    // 1. 获取过去 7 日内所有被日报采纳的新闻并选分数 top 9
-    const selectedItems = repository.listWeeklyCandidates(startDateStr, endDateStr, limit);
+    // 1. 获取本 ISO 周内所有被日报采纳的新闻并选分数 top 9
+    const selectedItems = repository.listWeeklyCandidates(week.startDateStr, week.endDateStr, limit);
 
     // 2. 组装并渲染周报内容 (Markdown 和 HTML)
-    const compactDate = generatedAt.slice(0, 10).replace(/-/g, "");
-    const weeklyTitle = `智游镜 | 每周AI游戏新闻速递 ${compactDate}`;
+    const weeklyTitle = `智游镜 | 每周AI游戏新闻速递 ${week.weekKey}`;
     const weeklyMarkdown = renderWeeklyMarkdown(
       selectedItems,
       generatedAt,
@@ -85,11 +75,13 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
         command: "run-weekly",
         mockMode: config.MOCK_MODE,
         weeklyLimit: limit,
+        weekKey: week.weekKey,
         startDate: displayStartDate,
         endDate: displayEndDate
       },
       result: {
         selectedItems: selectedItems.length,
+        weekKey: week.weekKey,
         startDate: displayStartDate,
         endDate: displayEndDate,
         outputDir,
@@ -104,7 +96,7 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
       outputType: "markdown_weekly",
       outputPath: weeklyMarkdownPath,
       content: weeklyMarkdown,
-      metadata: { format: "markdown", startDate: displayStartDate, endDate: displayEndDate }
+      metadata: { format: "markdown", weekKey: week.weekKey, startDate: displayStartDate, endDate: displayEndDate }
     });
 
     repository.saveGeneratedOutput({
@@ -112,12 +104,13 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
       outputType: "html_weekly",
       outputPath: weeklyHtmlPath,
       content: weeklyHtml,
-      metadata: { format: "html", startDate: displayStartDate, endDate: displayEndDate }
+      metadata: { format: "html", weekKey: week.weekKey, startDate: displayStartDate, endDate: displayEndDate }
     });
 
     return {
       generatedAt,
       runId: run.id,
+      weekKey: week.weekKey,
       startDate: displayStartDate,
       endDate: displayEndDate,
       selectedItems,
@@ -128,6 +121,45 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
   } finally {
     repository.close();
   }
+}
+
+interface IsoWeekInfo {
+  weekKey: string;
+  startDateStr: string;
+  endDateStr: string;
+}
+
+function getIsoWeekInfo(generatedAt: string): IsoWeekInfo {
+  const base = new Date(generatedAt);
+  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()));
+  const weekday = start.getUTCDay() || 7;
+  start.setUTCDate(start.getUTCDate() - weekday + 1);
+  start.setUTCHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  end.setUTCHours(23, 59, 59, 999);
+
+  return {
+    weekKey: formatIsoWeekKey(start),
+    startDateStr: start.toISOString(),
+    endDateStr: end.toISOString()
+  };
+}
+
+function formatIsoWeekKey(weekStart: Date): string {
+  const thursday = new Date(weekStart);
+  thursday.setUTCDate(weekStart.getUTCDate() + 3);
+  const weekYear = thursday.getUTCFullYear();
+
+  const weekOneAnchor = new Date(Date.UTC(weekYear, 0, 4));
+  const weekOneWeekday = weekOneAnchor.getUTCDay() || 7;
+  const weekOneStart = new Date(weekOneAnchor);
+  weekOneStart.setUTCDate(weekOneAnchor.getUTCDate() - weekOneWeekday + 1);
+  weekOneStart.setUTCHours(0, 0, 0, 0);
+
+  const weekNumber = Math.floor((weekStart.getTime() - weekOneStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return `${weekYear}-W${String(weekNumber).padStart(2, "0")}`;
 }
 
 function normalizeGeneratedAt(date?: string): string {

@@ -19,6 +19,9 @@ export const CONFIG = {
   
   // 显示最近多少天
   daysCount: 7,
+
+  // 每周精选显示最近多少周
+  weeksCount: 4,
   
   // 报告类型定义
   reportTypes: {

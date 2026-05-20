@@ -71,6 +71,7 @@ export class ViewerComponent {
       emptyState.classList.add('visible');
       
       const typeLabel = type === 'daily' ? '每日日报 (WeChat)' : '每周精选 (Weekly)';
+      const periodLabel = type === 'weekly' ? '这一周' : '这一天';
       emptyState.innerHTML = `
         <div class="empty-icon-wrapper">
           <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -79,8 +80,8 @@ export class ViewerComponent {
           </svg>
         </div>
         <p class="empty-title">暂无相关报告</p>
-        <p class="empty-desc">在 <strong>${date}</strong> 这一天，系统尚未生成 <strong>${typeLabel}</strong>。</p>
-        <p class="empty-tip">提示：请在下方日期中选择带有绿色指示灯的日期，或运行 pipeline 生成该日期报告。</p>
+        <p class="empty-desc">在 <strong>${date}</strong> ${periodLabel}，系统尚未生成 <strong>${typeLabel}</strong>。</p>
+        <p class="empty-tip">提示：请在下方列表中选择带有绿色指示灯的周期，或运行 pipeline 生成对应报告。</p>
       `;
     }
   }

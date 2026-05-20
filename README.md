@@ -73,7 +73,7 @@ npm run run-daily
 npm run run-daily -- --date 2026-05-20
 ```
 
-生成周报。周报会读取过去 7 天内已经被日报采纳的内容，并输出周报 Markdown 与公众号 HTML：
+生成周报。周报会读取指定日期所在 ISO 周（周一到周日）内已经被日报采纳的内容，并输出周报 Markdown 与公众号 HTML：
 
 ```bash
 npm run run-weekly -- --date 2026-05-20
@@ -185,14 +185,12 @@ TTS Provider：
 
 ## 输出产物
 
-以运行日期 `YYYY-MM-DD` 为例，产物位于 `output/YYYY-MM-DD/`：
+以运行日期 `YYYY-MM-DD` 为例，日报产物位于 `output/YYYY-MM-DD/`：
 
 - `daily.md`：日报 Markdown。
 - `daily-report.md`：兼容旧路径的日报 Markdown。
 - `zhihu.md`：知乎 Markdown 版本。
 - `wechat.html`：微信公众号 HTML 版本，可作为「智游镜」日报发布底稿。
-- `weekly.md`：周报 Markdown。
-- `weekly.html`：周报公众号 HTML。
 - `audit/editorial-selection-audit.json`：自动选题与校验审计。
 - `audio/*.wav`：TTS 音频片段。
 - `subtitles.srt`：字幕文件。
@@ -202,6 +200,8 @@ TTS Provider：
 - `video-composition-audit.json`：视频合成审计。
 - `distribution/manifest.json`：分发包清单。
 - `distribution/<platform>/metadata.json`：`bilibili`、`youtube`、`wechat`、`zhihu`、`xiaohongshu`、`douyin` 等平台元数据。
+
+周报按 ISO 周存储，产物位于 `output/weekly/YYYY-Www/`。同一周重复运行会覆盖同一路径下的 `weekly.md` 和 `weekly.html`。
 - `pipeline-run.json`：完整运行记录，包含阶段、错误、入选条目和产物路径。
 
 SQLite 数据库默认写入 `data/news-daily.sqlite`。

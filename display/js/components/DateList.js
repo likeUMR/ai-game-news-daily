@@ -1,4 +1,4 @@
-import { getRecentDates, getReportUrl, checkFileExists } from '../utils.js';
+import { getRecentReportPeriods, getReportUrl, checkFileExists } from '../utils.js';
 import { CONFIG } from '../config.js';
 
 export class DateListComponent {
@@ -9,9 +9,9 @@ export class DateListComponent {
   constructor(containerId, onChange) {
     this.container = document.getElementById(containerId);
     this.onChange = onChange;
-    this.dates = getRecentDates(CONFIG.baseDate);
-    this.selectedDate = this.dates[0].value; // 默认选中最新的一天
     this.currentType = CONFIG.defaultType;
+    this.dates = getRecentReportPeriods(this.currentType);
+    this.selectedDate = this.dates[0].value; // 默认选中最新的报告周期
     this.fileExistenceMap = {}; // 缓存检测过的文件状态： { "daily_2026-05-20": true }
 
     this.render();
@@ -25,10 +25,9 @@ export class DateListComponent {
   setType(type) {
     if (this.currentType !== type) {
       this.currentType = type;
-      // 如果 selectedDate 为空（例如此前看了流程图被 deselect），恢复为最新日期
-      if (!this.selectedDate) {
-        this.selectedDate = this.dates[0].value;
-      }
+      this.dates = getRecentReportPeriods(type);
+      // 切换日报/周报时默认回到该类型最新的报告周期
+      this.selectedDate = this.dates[0]?.value ?? null;
       this.render();
       this.checkAllFiles();
     }
@@ -55,7 +54,7 @@ export class DateListComponent {
   }
 
   /**
-   * 异步检测最近 7 天所有文件的存在性，检测完毕后动态更新 UI
+   * 异步检测当前报告周期列表所有文件的存在性，检测完毕后动态更新 UI
    */
   async checkAllFiles() {
     const type = this.currentType;
@@ -97,7 +96,7 @@ export class DateListComponent {
 
     const label = document.createElement('div');
     label.className = 'date-list-title';
-    label.innerText = '选择报告日期:';
+    label.innerText = this.currentType === 'weekly' ? '选择报告周:' : '选择报告日期:';
     this.container.appendChild(label);
 
     const listWrapper = document.createElement('div');
