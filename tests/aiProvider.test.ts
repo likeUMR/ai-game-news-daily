@@ -91,6 +91,19 @@ describe("AI response validation", () => {
     expect(article.officialSources).toEqual(["https://example.com/story", "not a url"]);
     expect(grouped.entries[0]?.sourceLinks).toEqual(["invalid", "https://example.com/source"]);
   });
+
+  test("extracts the first complete JSON object when trailing commentary exists", () => {
+    const result = parseAiJsonResponse(
+      [
+        "Here is the requested object:",
+        "{\"newsValueScore\":80,\"aiRelevanceScore\":90,\"gameRelevanceScore\":70,\"crossRelevanceScore\":75,\"isTopicCandidate\":true,\"exclusionReasons\":[],\"aiTags\":[\"tooling\"],\"gameTags\":[\"development\"]}",
+        "Extra note with braces {ignored}"
+      ].join("\n"),
+      classificationSchema
+    );
+
+    expect(result.crossRelevanceScore).toBe(75);
+  });
 });
 
 describe("createAIProvider", () => {

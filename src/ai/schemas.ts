@@ -100,21 +100,65 @@ function extractJsonText(raw: string): string {
     return fenced[1].trim();
   }
 
-  const objectStart = trimmed.indexOf("{");
-  const arrayStart = trimmed.indexOf("[");
-  const starts = [objectStart, arrayStart].filter((index) => index >= 0);
-  if (starts.length === 0) {
-    throw new AIResponseValidationError("AI response did not contain a JSON object or array.");
+  const segment = findBalancedJsonSegment(trimmed);
+  if (!segment) {
+    throw new AIResponseValidationError("AI response did not contain a complete JSON object or array.");
   }
 
-  const start = Math.min(...starts);
-  const opening = trimmed[start];
-  const closing = opening === "{" ? "}" : "]";
-  const end = trimmed.lastIndexOf(closing);
-  if (end < start) {
-    throw new AIResponseValidationError("AI response JSON was incomplete.");
+  return segment;
+}
+
+function findBalancedJsonSegment(raw: string): string | null {
+  for (let start = 0; start < raw.length; start += 1) {
+    const opening = raw[start];
+    if (opening !== "{" && opening !== "[") {
+      continue;
+    }
+
+    const closing = opening === "{" ? "}" : "]";
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < raw.length; index += 1) {
+      const char = raw[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+
+        if (char === "\\") {
+          escaped = true;
+          continue;
+        }
+
+        if (char === "\"") {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === "\"") {
+        inString = true;
+        continue;
+      }
+
+      if (char === opening) {
+        depth += 1;
+        continue;
+      }
+
+      if (char === closing) {
+        depth -= 1;
+        if (depth === 0) {
+          return raw.slice(start, index + 1);
+        }
+      }
+    }
   }
 
-  return trimmed.slice(start, end + 1);
+  return null;
 }
 
