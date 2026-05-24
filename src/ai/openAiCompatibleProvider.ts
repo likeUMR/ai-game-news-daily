@@ -30,9 +30,9 @@ export interface OpenAICompatibleProviderOptions {
 }
 
 const defaultOpenAiBaseUrl = "https://api.openai.com/v1";
-const defaultOpenAiModel = "gpt-4o-mini";
+const defaultOpenAiModel = "gemini-3-flash-preview";
 const defaultRelayBaseUrl = "https://api.openai.com/v1";
-const defaultRelayModel = "gpt-4o-mini";
+const defaultRelayModel = "gemini-3-flash-preview";
 
 interface ChatCompletionResponse {
   choices?: Array<{

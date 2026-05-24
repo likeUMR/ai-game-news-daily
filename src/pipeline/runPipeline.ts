@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { createAIProvider } from "../ai/providerFactory.js";
 import type { AppConfig } from "../config/env.js";
 import { collectMockNews } from "../collectors/mockCollector.js";
-import { collectIntoSqlite } from "../collectors/collectNews.js";
+import { collectIntoSqlite, writeCollectionAudit } from "../collectors/collectNews.js";
 import { enrichWithMockAi } from "../ai/mockAi.js";
 import { enrichWithProvider } from "../ai/mockProvider.js";
 import { openNewsRepository } from "../db/newsRepository.js";
@@ -68,6 +68,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
   let selectedItems = [] as NewsItem[];
   let enriched = [] as NewsItem[];
   let auditPath = "";
+  let collectionAuditPath = "";
   let markdownPath = "";
   let dailyMarkdownPath = "";
   let zhihuMarkdownPath = "";
@@ -81,11 +82,27 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
   try {
     const collected = await runStage(stages, errors, "collect", async () => {
       let items: NewsItem[] = [];
+      let collectionSummary: Record<string, unknown> = {};
       if (config.MOCK_MODE) {
         items = markDuplicateNewsItems(await collectMockNews(new Date(generatedAt)));
+        collectionSummary = {
+          fetchedItems: items.length,
+          insertedItems: items.length,
+          skippedDuplicates: 0,
+          collectionFailures: 0
+        };
       } else {
         // 1. 真实采集
-        await collectIntoSqlite(config);
+        const collection = await collectIntoSqlite(config);
+        collectionAuditPath = await writeCollectionAudit(outputDir, collection);
+        collectionSummary = {
+          fetchedItems: collection.items.length,
+          insertedItems: collection.inserted,
+          skippedDuplicates: collection.skippedDuplicates,
+          markedDuplicates: collection.markedDuplicates,
+          collectionFailures: collection.failures.length,
+          collectionAuditPath
+        };
         
         // 2. 获取未处理的原始数据
         const pendingRaw = repository.listPendingRawItems(config.MAX_ITEMS_TOTAL);
@@ -95,6 +112,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
           const title = typeof raw.metadata.title === "string" ? raw.metadata.title : "";
           return {
             id: raw.id,
+            rawItemId: raw.id,
             sourceUrl: raw.sourceUrl,
             sourceName: raw.sourceName,
             sourceType: raw.sourceType,
@@ -132,7 +150,13 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
         // 4. 去重
         items = markDuplicateNewsItems(items);
       }
-      return { value: items, summary: { collectedItems: items.length } };
+      return {
+        value: items,
+        summary: {
+          collectedItems: items.length,
+          ...collectionSummary
+        }
+      };
     });
 
     enriched = await runStage(stages, errors, "screen", async () => {
@@ -148,7 +172,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
         });
 
         // 保存筛选结果与审计日志至 SQLite 数据库中
-        for (const item of items) {
+        for (const item of orderForProcessedSave(items)) {
           repository.saveProcessedFields({ ...item, rawItemId: item.id });
           repository.saveProcessingAudit({
             rawItemId: item.id,
@@ -372,6 +396,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
       enrichedItems: selection.selection.items,
       selectedItems,
       auditPath,
+      collectionAuditPath: collectionAuditPath || undefined,
       markdownPath,
       videoPlanPath,
       videoPath: composition.videoPath,
@@ -443,6 +468,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
         errors,
         artifactPaths: {
           text: markdownPath,
+          collectionAudit: collectionAuditPath || undefined,
           dailyMarkdown: dailyMarkdownPath,
           zhihuMarkdown: zhihuMarkdownPath,
           wechatHtml: wechatHtmlPath,
@@ -499,6 +525,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
         errors,
         artifactPaths: {
           text: markdownPath,
+          collectionAudit: collectionAuditPath || undefined,
           dailyMarkdown: dailyMarkdownPath,
           zhihuMarkdown: zhihuMarkdownPath,
           wechatHtml: wechatHtmlPath,
@@ -568,6 +595,18 @@ function formatStageSummary(summary?: Record<string, unknown>): string {
     .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
     .map(([key, value]) => `${key}=${String(value)}`);
   return entries.length > 0 ? ` ${entries.join(" ")}` : "";
+}
+
+function orderForProcessedSave(items: NewsItem[]): NewsItem[] {
+  const pendingIds = new Set(items.map((item) => item.id));
+  return [...items].sort((left, right) => {
+    const leftDependsOnPending = left.duplicateOf !== null && pendingIds.has(left.duplicateOf);
+    const rightDependsOnPending = right.duplicateOf !== null && pendingIds.has(right.duplicateOf);
+    if (leftDependsOnPending === rightDependsOnPending) {
+      return 0;
+    }
+    return leftDependsOnPending ? 1 : -1;
+  });
 }
 
 function normalizeGeneratedAt(date?: string): string {

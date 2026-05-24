@@ -167,7 +167,7 @@ export const sourceRegistry = [
     source_weight: 74,
     suggested_frequency: "daily, about 2 game news items",
     collection_strategy: "json_api",
-    max_items_per_window: 15,
+    max_items_per_window: 50,
     notes: "Industry, publishing, and commercial dynamics."
   },
   {
@@ -193,7 +193,7 @@ export const sourceRegistry = [
     source_weight: 48,
     suggested_frequency: "daily high-volume radar, filtered for AI or industry signals",
     collection_strategy: "json_api",
-    max_items_per_window: 18,
+    max_items_per_window: 80,
     notes: "Broad game news flow; prefilter obvious gossip and only keep AI or industry-relevant items."
   },
   {
@@ -225,14 +225,14 @@ export const sourceRegistry = [
   {
     id: "3dm",
     name: "3DM",
-    url: "https://www.3dmgame.com/news_all_2/",
+    url: "https://www.3dmgame.com/news_all_1/",
     source_group: "game_native",
     source_type: "game_media",
     priority: "low",
     source_weight: 45,
     suggested_frequency: "daily high-volume radar, filtered for AI-related development signals",
     collection_strategy: "web_page",
-    max_items_per_window: 12,
+    max_items_per_window: 80,
     notes: "Very high volume and noisy; only keep items with AI or engine-development relevance."
   },
   {

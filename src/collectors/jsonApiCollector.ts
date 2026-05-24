@@ -1,6 +1,7 @@
 import type { SourceDefinition } from "../config/sourceRegistry.js";
 import type { CollectionResult, Collector, FetchLike, RawCollectedItem } from "./types.js";
 import { normalizeCollectedUrl } from "./url.js";
+import { applyRulePrefilter } from "./rulePrefilter.js";
 
 export interface JsonApiCollectorOptions {
   fetch?: FetchLike;
@@ -100,21 +101,46 @@ const sourceAdapters: Record<string, JsonApiSourceAdapter> = {
   },
   gamersky: {
     async fetchItems(source, fetchImpl, timeoutMs, now) {
-      const apiUrl = "https://db2.gamersky.com/LabelJsonpAjax.aspx?jsondata=%7B%22type%22%3A%22updatenodelabel%22%2C%22nodeId%22%3A%2211007%22%2C%22isNodeId%22%3Atrue%2C%22page%22%3A1%7D";
-      const text = await fetchText(apiUrl, fetchImpl, timeoutMs, {
-        headers: {
-          Referer: source.url ?? "https://www.gamersky.com/news/"
-        }
-      });
-      const payload = parseJsonp(text);
-      const body = typeof payload.body === "string" ? payload.body : "";
+      const limit = source.max_items_per_window ?? 50;
+      const items: RawCollectedItem[] = [];
+      const seen = new Set<string>();
+      const maxPages = Math.max(1, Math.min(10, Math.ceil(limit / 50) + 3));
 
-      return extractGamerskyItems(body, source, now.toISOString()).filter((item) =>
-        isHighSignalItem(item.title, item.excerpt, "gamersky")
-      );
+      for (let page = 1; page <= maxPages; page += 1) {
+        const apiUrl = createGamerskyApiUrl(page);
+        const text = await fetchText(apiUrl, fetchImpl, timeoutMs, {
+          headers: {
+            Referer: source.url ?? "https://www.gamersky.com/news/"
+          }
+        });
+        const payload = parseJsonp(text);
+        const body = typeof payload.body === "string" ? payload.body : "";
+        const pageItems = extractGamerskyItems(body, source, now.toISOString());
+        if (pageItems.length === 0) {
+          break;
+        }
+        for (const item of pageItems) {
+          if (!seen.has(item.url)) {
+            seen.add(item.url);
+            items.push(item);
+          }
+        }
+      }
+
+      return applyRulePrefilter(source.id, items, limit);
     }
   }
 };
+
+function createGamerskyApiUrl(page: number): string {
+  const jsondata = encodeURIComponent(JSON.stringify({
+    type: "updatenodelabel",
+    nodeId: "11007",
+    isNodeId: true,
+    page
+  }));
+  return `https://db2.gamersky.com/LabelJsonpAjax.aspx?jsondata=${jsondata}`;
+}
 
 async function fetchJson(url: string, fetchImpl: FetchLike, timeoutMs: number): Promise<unknown> {
   const text = await fetchText(url, fetchImpl, timeoutMs);
@@ -177,10 +203,10 @@ export function extractGamerskyItems(html: string, source: SourceDefinition, col
   for (const match of html.matchAll(/<li>\s*([\s\S]*?)<\/li>/gi)) {
     const block = match[1] ?? "";
     const anchorMatch =
-      block.match(/<a\b[^>]*class=["']tt["'][^>]*href=["']([^"']+)["'][^>]*title=["']([\s\S]*?)["'][^>]*>/i) ??
-      block.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*title=["']([\s\S]*?)["'][^>]*>/i);
+      block.match(/<a\b[^>]*class=["']tt["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i) ??
+      block.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
     const rawUrl = anchorMatch?.[1];
-    const title = cleanText(decodeEntities(anchorMatch?.[2] ?? ""));
+    const title = cleanText(anchorMatch?.[2] ?? "");
     const url = rawUrl ? normalizeCollectedUrl(rawUrl, source.url) : null;
 
     if (!url || !title || seen.has(url)) {
@@ -230,19 +256,6 @@ function parseUnixTimestamp(value: unknown): string | null {
     return null;
   }
   return new Date(numeric * 1000).toISOString();
-}
-
-function isHighSignalItem(title: string, excerpt: string, sourceId: string): boolean {
-  const content = `${title} ${excerpt}`.toLowerCase();
-  const hasAiSignal = /(ai|aigc|llm|agent|人工智能|大模型|智能体|生成式)/i.test(content);
-  const hasIndustrySignal = /(游戏|厂商|工作室|研发|发行|上线|融资|合作|引擎|studio|engine|publishing|funding|partnership)/i.test(content);
-  const hasNoiseSignal = /(老婆|主播|热议|相貌|血被|cos|写真|小姐姐|悲鸣|八卦|恋情)/i.test(content);
-
-  if (sourceId === "gamersky") {
-    return !hasNoiseSignal && (hasAiSignal || hasIndustrySignal);
-  }
-
-  return true;
 }
 
 function extractYouxituoluoTags(value: unknown): string[] {

@@ -2,6 +2,7 @@ export type SourceType = "ai_media" | "game_media" | "ai_game_media" | "official
 
 export interface NewsItem {
   id: string;
+  rawItemId?: string | null;
   sourceUrl: string;
   sourceName: string;
   sourceType: SourceType;
@@ -62,6 +63,7 @@ export interface PipelineResult {
   enrichedItems: NewsItem[];
   selectedItems: NewsItem[];
   auditPath: string;
+  collectionAuditPath?: string;
   markdownPath: string;
   videoPlanPath: string;
   videoPath?: string;

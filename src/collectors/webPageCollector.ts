@@ -1,6 +1,7 @@
 import type { SourceDefinition } from "../config/sourceRegistry.js";
 import type { CollectionResult, Collector, FetchLike, RawCollectedItem } from "./types.js";
 import { isSameOriginUrl, normalizeCollectedUrl } from "./url.js";
+import { applyRulePrefilter } from "./rulePrefilter.js";
 
 export interface WebPageCollectorOptions {
   fetch?: FetchLike;
@@ -27,8 +28,12 @@ export class WebPageCollector implements Collector {
 
     for (const source of webSources) {
       try {
-        const html = await this.fetchHtml(source.url!, this.timeoutMs);
-        items.push(...extractListingLinks(html, source, now).slice(0, source.max_items_per_window ?? this.maxItemsPerSource));
+        if (source.id === "3dm") {
+          items.push(...await this.collect3dmPages(source, now));
+        } else {
+          const html = await this.fetchHtml(source.url!, this.timeoutMs);
+          items.push(...extractListingLinks(html, source, now).slice(0, source.max_items_per_window ?? this.maxItemsPerSource));
+        }
       } catch (error) {
         failures.push({
           sourceId: source.id,
@@ -60,6 +65,37 @@ export class WebPageCollector implements Collector {
       clearTimeout(timeout);
     }
   }
+
+  private async collect3dmPages(source: SourceDefinition, now: Date): Promise<RawCollectedItem[]> {
+    const limit = source.max_items_per_window ?? this.maxItemsPerSource;
+    const items: RawCollectedItem[] = [];
+    const seen = new Set<string>();
+    const maxPages = Math.max(1, Math.min(10, Math.ceil(limit / 20) + 1));
+
+    for (let page = 1; page <= maxPages && items.length < limit; page += 1) {
+      const html = await this.fetchHtml(create3dmPageUrl(source.url!, page), this.timeoutMs);
+      const pageItems = extractListingLinks(html, source, now);
+      if (pageItems.length === 0) {
+        break;
+      }
+      for (const item of pageItems) {
+        if (!seen.has(item.url)) {
+          seen.add(item.url);
+          items.push(item);
+        }
+        if (items.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    return applyRulePrefilter(source.id, items, limit);
+  }
+}
+
+function create3dmPageUrl(sourceUrl: string, page: number): string {
+  const base = sourceUrl.match(/^(https:\/\/www\.3dmgame\.com\/news_all_)\d+\/?$/)?.[1] ?? "https://www.3dmgame.com/news_all_";
+  return `${base}${page}/`;
 }
 
 export function extractListingLinks(html: string, source: SourceDefinition, now = new Date()): RawCollectedItem[] {
@@ -181,7 +217,7 @@ function extract3dmNewsItems(html: string, source: SourceDefinition, now: Date):
     const excerpt = cleanText(match[4] ?? "");
     const publishedAt = parseChineseListingTime(timeText, now) ?? collectedAt;
 
-    if (!url || !title || seen.has(url) || !isHighSignalWebItem(source.id, title, excerpt)) {
+    if (!url || !title || seen.has(url)) {
       continue;
     }
 
@@ -190,10 +226,6 @@ function extract3dmNewsItems(html: string, source: SourceDefinition, now: Date):
   }
 
   return items;
-}
-
-function isHighSignalWebItem(sourceId: string, title: string, excerpt: string): boolean {
-  return true;
 }
 
 function buildListingItem(

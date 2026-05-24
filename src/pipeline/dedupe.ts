@@ -32,7 +32,9 @@ export function markDuplicateNewsItems(items: NewsItem[]): NewsItem[] {
     const matchedItem = match.duplicateOf ? processed.get(match.duplicateOf) : undefined;
     const preferred = matchedItem ? choosePreferredDedupeItem(candidate, toCandidate(matchedItem)) : candidate;
 
-    if (match.duplicateOf && matchedItem && preferred.id === candidate.id) {
+    const duplicateOf = normalizeDuplicateOf(match.duplicateOf ?? item.duplicateOf, item.id);
+
+    if (duplicateOf && matchedItem && preferred.id === candidate.id) {
       const previous = matchedItem;
       processed.set(previous.id, { ...previous, duplicateOf: candidate.id, selected: false });
       for (const [id, processedItem] of processed) {
@@ -42,11 +44,18 @@ export function markDuplicateNewsItems(items: NewsItem[]): NewsItem[] {
       }
       processed.set(item.id, { ...item, duplicateOf: null });
     } else {
-      processed.set(item.id, { ...item, duplicateOf: match.duplicateOf ?? item.duplicateOf });
+      processed.set(item.id, { ...item, duplicateOf });
     }
   }
 
   return items.map((item) => processed.get(item.id)!);
+}
+
+function normalizeDuplicateOf(duplicateOf: string | null | undefined, itemId: string): string | null {
+  if (!duplicateOf || duplicateOf === itemId) {
+    return null;
+  }
+  return duplicateOf;
 }
 
 export function findBestDuplicateMatch(candidate: DedupeCandidate, recentItems: DedupeCandidate[]): DuplicateMatch {
@@ -187,8 +196,29 @@ function officialRank(type: SourceType): number {
 }
 
 function tokenize(value: string): Set<string> {
-  const words = value.match(/[\p{L}\p{N}]+/gu) ?? [];
-  return new Set(words.filter((word) => word.length > 2));
+  const tokens = new Set<string>();
+  
+  // 1. 匹配汉字串，并切分为双字 Bi-gram（解决中文无空格、词长2字的问题）
+  const cjkMatches = value.match(/[\p{Script=Han}]+/gu) ?? [];
+  for (const match of cjkMatches) {
+    if (match.length === 1) {
+      tokens.add(match);
+    } else {
+      for (let i = 0; i < match.length - 1; i++) {
+        tokens.add(match.slice(i, i + 2));
+      }
+    }
+  }
+
+  // 2. 匹配非汉字词（英文、数字等），过滤掉超短无意义词（length > 2）
+  const nonCjkMatches = value.match(/[a-zA-Z0-9]+/gu) ?? [];
+  for (const match of nonCjkMatches) {
+    if (match.length > 2) {
+      tokens.add(match.toLowerCase());
+    }
+  }
+
+  return tokens;
 }
 
 function jaccardSimilarity(left: Set<string>, right: Set<string>): number {
