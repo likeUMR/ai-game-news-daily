@@ -47,6 +47,27 @@ describe("MockAIProvider", () => {
     expect(enriched?.selected).toBe(false);
     expect(enriched?.articleTitle).toContain("Pixel2Play");
   });
+
+  test("excludes a single item when provider enrichment fails", async () => {
+    const provider = {
+      classifyAndFilter: async () => {
+        throw new Error("bad model output");
+      },
+      summarize: async () => ({ summary: "ok", introSummary: "ok" }),
+      extractKeywords: async () => ({ keywords: [] }),
+      scoreRelevance: async () => ({ aiRelevanceScore: 0, gameRelevanceScore: 0, crossRelevanceScore: 0 }),
+      generateArticleEntry: async () => ({ title: "ok", body: "ok", category: "AI x Game", officialSources: [] }),
+      generateArticleEntries: async () => ({ entries: [] }),
+      formatMarkdown: async () => ({ markdown: "ok" }),
+      generateVoiceoverScript: async () => ({ segments: [] })
+    };
+
+    const [enriched] = await enrichWithProvider(provider, [createItem("bad", richPixel2PlayContent)], { minCrossRelevanceScore: 60 });
+
+    expect(enriched?.selected).toBe(false);
+    expect(enriched?.isTopicCandidate).toBe(false);
+    expect(enriched?.exclusionReason).toContain("ai enrichment failed");
+  });
 });
 
 const richPixel2PlayContent = [
@@ -104,6 +125,27 @@ describe("AI response validation", () => {
 
     expect(result.crossRelevanceScore).toBe(75);
   });
+
+  test("accepts singleton arrays when a model wraps an object response", () => {
+    const result = parseAiJsonResponse(
+      "[{\"newsValueScore\":80,\"aiRelevanceScore\":90,\"gameRelevanceScore\":70,\"crossRelevanceScore\":75,\"isTopicCandidate\":true,\"exclusionReasons\":[],\"aiTags\":[\"tooling\"],\"gameTags\":[\"development\"]}]",
+      classificationSchema
+    );
+
+    expect(result.isTopicCandidate).toBe(true);
+  });
+
+  test("uses the first JSON segment that matches the requested schema", () => {
+    const result = parseAiJsonResponse(
+      [
+        "[\"not\", \"the\", \"schema\"]",
+        "{\"newsValueScore\":80,\"aiRelevanceScore\":90,\"gameRelevanceScore\":70,\"crossRelevanceScore\":75,\"isTopicCandidate\":true,\"exclusionReasons\":[],\"aiTags\":[\"tooling\"],\"gameTags\":[\"development\"]}"
+      ].join("\n"),
+      classificationSchema
+    );
+
+    expect(result.crossRelevanceScore).toBe(75);
+  });
 });
 
 describe("createAIProvider", () => {
@@ -142,7 +184,7 @@ describe("OpenAICompatibleProvider", () => {
     }
 
     expect(String(requests[0]?.input)).toBe("https://api.openai.com/v1/chat/completions");
-    expect(requests[0]?.body).toMatchObject({ model: "gpt-4o-mini" });
+    expect(requests[0]?.body).toMatchObject({ model: "gemini-3-flash-preview" });
   });
 
   test("accepts LLM_TOKEN and LLM_MODEL aliases for relay configuration", async () => {

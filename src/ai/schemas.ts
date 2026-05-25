@@ -73,42 +73,59 @@ export class AIResponseValidationError extends Error {
 }
 
 export function parseAiJsonResponse<T>(raw: string, schema: z.ZodType<T>): T {
-  const jsonText = extractJsonText(raw);
+  const jsonTexts = extractJsonTexts(raw);
+  let lastSchemaError: z.ZodError | null = null;
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (error) {
-    throw new AIResponseValidationError("AI response did not contain valid JSON.", error);
+  for (const jsonText of jsonTexts) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      continue;
+    }
+
+    const result = schema.safeParse(parsed);
+    if (result.success) {
+      return result.data;
+    }
+    lastSchemaError = result.error;
+
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        const entryResult = schema.safeParse(entry);
+        if (entryResult.success) {
+          return entryResult.data;
+        }
+        lastSchemaError = entryResult.error;
+      }
+    }
   }
 
-  const result = schema.safeParse(parsed);
-  if (!result.success) {
-    const details = result.error.issues
-      .map((issue) => `- ${issue.path.join(".") || "response"}: ${issue.message}`)
-      .join("\n");
-    throw new AIResponseValidationError(`AI response failed schema validation:\n${details}`, result.error);
+  if (lastSchemaError) {
+    throw new AIResponseValidationError(formatSchemaError(lastSchemaError), lastSchemaError);
   }
 
-  return result.data;
+  throw new AIResponseValidationError("AI response did not contain valid JSON.");
 }
 
-function extractJsonText(raw: string): string {
+function extractJsonTexts(raw: string): string[] {
   const trimmed = raw.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   if (fenced?.[1]) {
-    return fenced[1].trim();
+    return [fenced[1].trim()];
   }
 
-  const segment = findBalancedJsonSegment(trimmed);
-  if (!segment) {
+  const segments = findBalancedJsonSegments(trimmed);
+  if (segments.length === 0) {
     throw new AIResponseValidationError("AI response did not contain a complete JSON object or array.");
   }
 
-  return segment;
+  return segments;
 }
 
-function findBalancedJsonSegment(raw: string): string | null {
+function findBalancedJsonSegments(raw: string): string[] {
+  const segments: string[] = [];
+
   for (let start = 0; start < raw.length; start += 1) {
     const opening = raw[start];
     if (opening !== "{" && opening !== "[") {
@@ -153,12 +170,21 @@ function findBalancedJsonSegment(raw: string): string | null {
       if (char === closing) {
         depth -= 1;
         if (depth === 0) {
-          return raw.slice(start, index + 1);
+          segments.push(raw.slice(start, index + 1));
+          start = index;
+          break;
         }
       }
     }
   }
 
-  return null;
+  return segments;
+}
+
+function formatSchemaError(error: z.ZodError): string {
+  const details = error.issues
+    .map((issue) => `- ${issue.path.join(".") || "response"}: ${issue.message}`)
+    .join("\n");
+  return `AI response failed schema validation:\n${details}`;
 }
 

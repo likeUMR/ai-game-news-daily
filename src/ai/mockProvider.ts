@@ -314,35 +314,60 @@ export async function enrichWithProvider(
   const enriched: NewsItem[] = [];
 
   for (const item of items) {
-    const [classification, summary, keywords, article] = await Promise.all([
-      provider.classifyAndFilter(item, options),
-      provider.summarize(item),
-      provider.extractKeywords(item),
-      provider.generateArticleEntry(item)
-    ]);
-    const selected = classification.isTopicCandidate && item.duplicateOf === null;
+    try {
+      const [classification, summary, keywords, article] = await Promise.all([
+        provider.classifyAndFilter(item, options),
+        provider.summarize(item),
+        provider.extractKeywords(item),
+        provider.generateArticleEntry(item)
+      ]);
+      const selected = classification.isTopicCandidate && item.duplicateOf === null;
 
-    enriched.push({
-      ...item,
-      summary: summary.summary,
-      keywords: keywords.keywords,
-      category: article.category,
-      score: classification.crossRelevanceScore,
-      newsValueScore: classification.newsValueScore,
-      selected,
-      articleTitle: article.title,
-      articleBody: article.body,
-      introSummary: summary.introSummary,
-      officialSources: article.officialSources,
-      scriptSegments: (await provider.generateVoiceoverScript([{ ...item, articleTitle: article.title, summary: summary.summary, introSummary: summary.introSummary }])).segments,
-      aiRelevanceScore: classification.aiRelevanceScore,
-      gameRelevanceScore: classification.gameRelevanceScore,
-      crossRelevanceScore: classification.crossRelevanceScore,
-      aiTags: classification.aiTags,
-      gameTags: classification.gameTags,
-      isTopicCandidate: classification.isTopicCandidate,
-      exclusionReason: classification.exclusionReasons.join("; ")
-    });
+      enriched.push({
+        ...item,
+        summary: summary.summary,
+        keywords: keywords.keywords,
+        category: article.category,
+        score: classification.crossRelevanceScore,
+        newsValueScore: classification.newsValueScore,
+        selected,
+        articleTitle: article.title,
+        articleBody: article.body,
+        introSummary: summary.introSummary,
+        officialSources: article.officialSources,
+        scriptSegments: (await provider.generateVoiceoverScript([{ ...item, articleTitle: article.title, summary: summary.summary, introSummary: summary.introSummary }])).segments,
+        aiRelevanceScore: classification.aiRelevanceScore,
+        gameRelevanceScore: classification.gameRelevanceScore,
+        crossRelevanceScore: classification.crossRelevanceScore,
+        aiTags: classification.aiTags,
+        gameTags: classification.gameTags,
+        isTopicCandidate: classification.isTopicCandidate,
+        exclusionReason: classification.exclusionReasons.join("; ")
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown AI enrichment error.";
+      enriched.push({
+        ...item,
+        summary: item.rawContent.slice(0, 240),
+        keywords: [],
+        category: "Excluded",
+        score: 0,
+        newsValueScore: 0,
+        selected: false,
+        articleTitle: item.articleTitle || item.rawContent.slice(0, 80),
+        articleBody: "",
+        introSummary: "AI enrichment failed; item excluded from automated selection.",
+        officialSources: [],
+        scriptSegments: [],
+        aiRelevanceScore: 0,
+        gameRelevanceScore: 0,
+        crossRelevanceScore: 0,
+        aiTags: [],
+        gameTags: [],
+        isTopicCandidate: false,
+        exclusionReason: `ai enrichment failed: ${message}`
+      });
+    }
   }
 
   return enriched;
