@@ -97,7 +97,7 @@ describe("generateArticlesForSelectedItems", () => {
     expect(result.items[0]?.officialSources).toEqual(["https://media.example.com/source"]);
   });
 
-  test("rejects low-quality generated articles instead of falling back", async () => {
+  test("falls back to evidence-only article fields for low-quality generated articles", async () => {
     repository = await createRepository();
     const item = persist(createItem("bad"));
     const provider = new RecordingProvider({
@@ -109,9 +109,18 @@ describe("generateArticlesForSelectedItems", () => {
       }
     });
 
-    await expect(generateArticlesForSelectedItems(repository, provider, [item])).rejects.toThrow(
-      /article title is empty.*source links are missing.*article body must contain exactly 3 numbered points/u
-    );
+    const result = await generateArticlesForSelectedItems(repository, provider, [item]);
+    const generated = result.items[0]!;
+
+    expect(result.generated).toBe(0);
+    expect(result.fallback).toBe(1);
+    expect(result.validationFailures[0]?.reasons).toEqual(expect.arrayContaining([
+      "article title is empty",
+      "source links are missing",
+      "article body must contain exactly 3 numbered points"
+    ]));
+    expect(generated.articleTitle).toContain("Studio News reports");
+    expect(generated.articleBody).toContain("AI-assisted NPC tooling");
   });
 
   test("persists generated article fields to the database", async () => {
@@ -190,7 +199,7 @@ describe("generateArticlesForSelectedItems", () => {
     expect(result.generated).toBe(1);
   });
 
-  test("rejects title fragments instead of replacing them", async () => {
+  test("falls back when generated commentary collapses into a title fragment", async () => {
     repository = await createRepository();
     const item = persist(createItem("title-fragment"));
     const provider = new RecordingProvider({
@@ -202,9 +211,14 @@ describe("generateArticlesForSelectedItems", () => {
       }
     });
 
-    await expect(generateArticlesForSelectedItems(repository, provider, [item])).rejects.toThrow(
-      /intro summary is empty.*intro summary is too similar to the title/u
-    );
+    const result = await generateArticlesForSelectedItems(repository, provider, [item]);
+
+    expect(result.generated).toBe(0);
+    expect(result.fallback).toBe(1);
+    expect(result.validationFailures[0]?.reasons).toEqual(expect.arrayContaining([
+      "intro summary is empty",
+      "intro summary is too similar to the title"
+    ]));
   });
 });
 

@@ -60,7 +60,7 @@ export async function generateArticlesForSelectedItems(
 
   const validationFailures: ArticleGenerationResult["validationFailures"] = [];
   let generated = 0;
-  const fallback = 0;
+  let fallback = 0;
 
   const nextItems = items.map((item) => {
     if (!item.selected) {
@@ -71,7 +71,10 @@ export async function generateArticlesForSelectedItems(
     const validation = entry ? validateGeneratedArticle(item, entry) : { ok: false, reasons: ["AI article generation failed"] };
     if (!validation.ok || !entry) {
       validationFailures.push({ itemId: item.id, reasons: validation.reasons });
-      throw new Error(`Generated article for ${item.id} failed quality checks: ${validation.reasons.join("; ")}`);
+      fallback += 1;
+      const updated = buildFallbackArticle(item);
+      repository.saveProcessedFields(updated);
+      return updated;
     }
 
     generated += 1;
@@ -92,6 +95,30 @@ export async function generateArticlesForSelectedItems(
   });
 
   return { items: nextItems, generated, fallback, validationFailures };
+}
+
+function buildFallbackArticle(item: NewsItem): NewsItem {
+  const title = firstContentLine(item.rawContent) || item.articleTitle || item.summary || "AI x 游戏候选新闻";
+  const summary = item.summary || firstContentLine(item.rawContent) || item.articleTitle;
+  const rawDetail = item.rawContent
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(1)
+    .join(" ");
+  const detail = rawDetail || summary;
+
+  return {
+    ...item,
+    articleTitle: clampText(title, 80),
+    articleBody: [
+      `1. ${clampText(summary, 180)}`,
+      `2. ${clampText(detail, 180)}`,
+      `3. 来源：${item.sourceName}；本条采用原始采集内容生成保守摘要，避免发布未通过验证的扩展判断。`
+    ].join("\n"),
+    introSummary: clampText(summary, 80),
+    officialSources: preserveSourceLinks(item, item.officialSources)
+  };
 }
 
 export function groupSelectedByCategory(items: NewsItem[]): ArticleGenerationContextGroup[] {
@@ -287,7 +314,27 @@ function tokenizeEvidence(value: string): string[] {
 }
 
 function tokenize(value: string): string[] {
-  return (value.toLowerCase().match(/[\p{Script=Han}]+|[a-z0-9]+/gu) ?? []).map(stemToken);
+  const tokens: string[] = [];
+  
+  // 1. CJK characters -> Bi-grams
+  const cjkMatches = value.match(/[\p{Script=Han}]+/gu) ?? [];
+  for (const match of cjkMatches) {
+    if (match.length === 1) {
+      tokens.push(match);
+    } else {
+      for (let i = 0; i < match.length - 1; i++) {
+        tokens.push(match.slice(i, i + 2));
+      }
+    }
+  }
+
+  // 2. Non-CJK words
+  const nonCjkMatches = value.toLowerCase().match(/[a-z0-9]+/gu) ?? [];
+  for (const match of nonCjkMatches) {
+    tokens.push(stemToken(match));
+  }
+
+  return tokens;
 }
 
 function stemToken(value: string): string {
@@ -296,6 +343,13 @@ function stemToken(value: string): string {
 
 function isCjkOnlyToken(value: string): boolean {
   return /^[\p{Script=Han}]+$/u.test(value);
+}
+
+function firstContentLine(value: string): string {
+  return value
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .find(Boolean) ?? "";
 }
 
 function clampText(value: string, maxLength: number): string {

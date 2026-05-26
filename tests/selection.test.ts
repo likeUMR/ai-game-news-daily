@@ -58,7 +58,7 @@ describe("selectAndVerifyItems", () => {
     expect(result.audit.duplicate[0]?.id).toBe("official-duplicate");
   });
 
-  test("fails verification for unsupported generated claims", () => {
+  test("replaces unsupported generated claims with evidence fallback for otherwise valid candidates", () => {
     const result = selectAndVerifyItems([
       createItem("unsupported", {
         articleTitle: "Quantum metaverse acquisition transforms cloud robots",
@@ -66,10 +66,32 @@ describe("selectAndVerifyItems", () => {
       })
     ], options({ dailyItemCount: 1 }));
 
-    expect(result.items.find((item) => item.id === "unsupported")?.selected).toBe(false);
-    expect(result.audit.failedVerification[0]?.reasons).toContain(
-      "generated claims do not trace to raw content, summary, or source metadata"
-    );
+    const selected = result.items.find((item) => item.id === "unsupported");
+    expect(selected?.selected).toBe(true);
+    expect(selected?.articleBody).toContain("AI-assisted NPC tooling");
+    expect(result.audit.failedVerification).toHaveLength(0);
+  });
+
+  test("keeps valid Chinese source candidates when generated English claims fail token tracing", () => {
+    const result = selectAndVerifyItems([
+      createItem("cjk-ai", {
+        rawContent: [
+          "国产修仙大作《不问凡尘》预告 真人超写实视觉",
+          "《不问凡尘》是一款可深入AI互动的修仙角色扮演游戏，依托智能AI驱动的独特NPC说服玩法。"
+        ].join("\n"),
+        summary: "国产修仙RPG《不问凡尘》发布新预告，特色在于智能AI驱动的NPC说服系统。",
+        keywords: ["不问凡尘", "AI互动", "NPC说服玩法", "Steam"],
+        score: 72,
+        sourceWeight: 45,
+        articleTitle: "Chinese Cultivation RPG Unveils AI-Driven NPC Interaction",
+        articleBody: "The title combines turn-based combat with high-fidelity graphics and a dynamic cultivation world where AI shapes the player's journey."
+      })
+    ], options({ dailyItemCount: 1 }));
+
+    const selected = result.items.find((item) => item.id === "cjk-ai");
+    expect(selected?.selected).toBe(true);
+    expect(selected?.articleTitle).toContain("不问凡尘");
+    expect(result.audit.selected).toHaveLength(1);
   });
 
   test("fills unused category quotas with highest-confidence verified items only", () => {
@@ -139,11 +161,11 @@ function createItem(id: string, overrides: Partial<NewsItem> = {}): NewsItem {
     sourceType: (overrides.sourceType as SourceType | undefined) ?? "ai_game_media",
     sourceWeight: overrides.sourceWeight ?? 80,
     sourceUrl: overrides.sourceUrl ?? `https://example.com/${id}`,
-    rawContent: "A game studio released AI-assisted NPC tooling for live operations and narrative testing.",
+    rawContent: overrides.rawContent ?? "A game studio released AI-assisted NPC tooling for live operations and narrative testing.",
     publishedAt: overrides.publishedAt ?? "2026-05-19T10:00:00.000Z",
     collectedAt: "2026-05-19T11:00:00.000Z",
-    summary: "AI-assisted NPC tooling for game live operations and narrative testing.",
-    keywords: ["AI", "game", "NPC", "tooling"],
+    summary: overrides.summary ?? "AI-assisted NPC tooling for game live operations and narrative testing.",
+    keywords: overrides.keywords ?? ["AI", "game", "NPC", "tooling"],
     category,
     score: overrides.score ?? 90,
     newsValueScore: 90,

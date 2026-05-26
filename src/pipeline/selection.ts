@@ -91,7 +91,12 @@ export function selectAndVerifyItems(items: NewsItem[], options: SelectionOption
     }
 
     const verification = verifyItem(candidate, options);
-    if (verification.ok && candidate.isTopicCandidate) {
+    const verifiedCandidate = verification.ok
+      ? candidate
+      : buildEvidenceFallbackCandidate(candidate, verification.reasons);
+    if (verifiedCandidate && candidate.isTopicCandidate) {
+      eligible.push(verifiedCandidate);
+    } else if (verification.ok && candidate.isTopicCandidate) {
       eligible.push(candidate);
     } else if (verification.ok) {
       rejected.push(toAuditEntry(candidate, options, [candidate.exclusionReason || "not a topic candidate"]));
@@ -195,6 +200,37 @@ function verifyItem(item: NewsItem, options: SelectionOptions): VerificationResu
   return { ok: reasons.length === 0, reasons };
 }
 
+function buildEvidenceFallbackCandidate(item: NewsItem, reasons: string[]): NewsItem | null {
+  if (
+    !item.isTopicCandidate
+    || reasons.length !== 1
+    || reasons[0] !== "generated claims do not trace to raw content, summary, or source metadata"
+  ) {
+    return null;
+  }
+
+  const title = firstContentLine(item.rawContent) || item.articleTitle || item.summary || "AI x 游戏候选新闻";
+  const summary = item.summary || firstContentLine(item.rawContent) || item.articleTitle;
+  const rawDetail = item.rawContent
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(1)
+    .join(" ");
+  const detail = rawDetail || summary;
+
+  return {
+    ...item,
+    articleTitle: clampText(title, 80),
+    introSummary: clampText(summary, 80),
+    articleBody: [
+      `1. ${clampText(summary, 180)}`,
+      `2. ${clampText(detail, 180)}`,
+      `3. 来源：${item.sourceName}；这条候选已通过AI x 游戏相关性筛选，保守采用原始信息生成，避免发布未验证扩展判断。`
+    ].join("\n")
+  };
+}
+
 function claimsTraceToEvidence(item: NewsItem): boolean {
   const claimTokens = tokenizeClaimText(`${item.articleTitle} ${item.articleBody}`);
   if (claimTokens.length === 0) {
@@ -217,8 +253,12 @@ function claimsTraceToEvidence(item: NewsItem): boolean {
   return traced / claimTokens.length >= 0.5;
 }
 
+function isCjkToken(value: string): boolean {
+  return /[\p{Script=Han}]/u.test(value);
+}
+
 function tokenizeClaimText(value: string): string[] {
-  return tokenize(value).filter((token) => !stopwords.has(token) && token.length > 3);
+  return tokenize(value).filter((token) => !stopwords.has(token) && (isCjkToken(token) || token.length > 3));
 }
 
 function tokenizeEvidence(value: string): string[] {
@@ -226,11 +266,46 @@ function tokenizeEvidence(value: string): string[] {
 }
 
 function tokenize(value: string): string[] {
-  return (value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).map(stemToken);
+  const tokens: string[] = [];
+  
+  // 1. CJK characters -> Bi-grams
+  const cjkMatches = value.match(/[\p{Script=Han}]+/gu) ?? [];
+  for (const match of cjkMatches) {
+    if (match.length === 1) {
+      tokens.push(match);
+    } else {
+      for (let i = 0; i < match.length - 1; i++) {
+        tokens.push(match.slice(i, i + 2));
+      }
+    }
+  }
+
+  // 2. Non-CJK words
+  const nonCjkMatches = value.toLowerCase().match(/[a-z0-9]+/gu) ?? [];
+  for (const match of nonCjkMatches) {
+    tokens.push(stemToken(match));
+  }
+
+  return tokens;
 }
 
 function stemToken(value: string): string {
   return value.replace(/(?:ing|ed|es|s)$/u, "");
+}
+
+function firstContentLine(value: string): string {
+  return value
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .find(Boolean) ?? "";
+}
+
+function clampText(value: string, maxLength: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
 function groupByDuplicateRoot(items: NewsItem[]): Map<string, NewsItem[]> {
