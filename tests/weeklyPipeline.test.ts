@@ -88,6 +88,11 @@ describe("runWeeklyPipeline", () => {
     expect(markdown).toContain("Week start");
     expect(markdown).not.toContain("Mock week");
     expect(markdown).not.toContain("Before week");
+
+    const publishedHtml = await readFile(first.weeklyHtmlPath, "utf8");
+    await writeSelectionAuditFixture(join(config.OUTPUT_DIR, "2026-05-18"), []);
+    await expect(runWeeklyPipeline(config, { date: "2026-05-22" })).rejects.toThrow(/No verified items/);
+    expect(await readFile(first.weeklyHtmlPath, "utf8")).toBe(publishedHtml);
   });
 });
 

@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import * as collection from "../src/collectors/collectNews.js";
 import { loadConfig } from "../src/config/env.js";
 import { DISTRIBUTION_PLATFORMS, type PlatformMetadata } from "../src/distribution/exportPackages.js";
 import { openNewsRepository } from "../src/db/newsRepository.js";
@@ -214,6 +215,45 @@ async function runMockDailyPipeline(): Promise<{ tempDir: string; databasePath: 
 
   return { tempDir, databasePath, result };
 }
+
+test.each(["zero candidates", "provider 403"])("withholds publication and preserves the last edition on %s", async (scenario) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "news-publication-guard-"));
+  tempDirs.push(tempDir);
+  const config = loadConfig({ APP_ROOT: tempDir, MOCK_MODE: "false" });
+  const priorHtml = join(config.OUTPUT_DIR, fixedDate, "wechat.html");
+  const priorAudit = join(dirname(priorHtml), "audit", "editorial-selection-audit.json");
+  await mkdir(dirname(priorAudit), { recursive: true });
+  await writeFile(priorHtml, "published edition");
+  await writeFile(priorAudit, "published selection");
+  const repository = openNewsRepository(config.DATABASE_PATH);
+  try {
+    if (scenario === "provider 403") {
+      const source = repository.upsertSource({ name: "Studio", type: "official", weight: 90 });
+      repository.insertRawItem({
+        id: "retry-me", sourceId: source.id, sourceUrl: "https://studio.example/news", rawContent: "AI game translation",
+        publishedAt: fixedGeneratedAt, collectedAt: fixedGeneratedAt
+      });
+    }
+    vi.spyOn(collection, "collectIntoSqlite").mockImplementation((_config, asOf) =>
+      collection.collectWithCollectors(repository, [], [], asOf));
+    vi.stubEnv("OPENAI_COMPATIBLE_API_KEY", "fixture");
+    vi.stubEnv("OPENAI_COMPATIBLE_BASE_URL", "https://relay.example/v1");
+    vi.stubEnv("OPENAI_COMPATIBLE_MODEL", "fixture-model");
+    const request = vi.fn(async () => new Response("forbidden", { status: 403 }));
+    vi.stubGlobal("fetch", request);
+    await expect(runPipeline(config, { date: fixedDate })).rejects.toThrow(
+      scenario === "provider 403" ? /HTTP 403/ : /No verified items/);
+    expect(request).toHaveBeenCalledTimes(scenario === "provider 403" ? 1 : 0);
+    expect(repository.listPendingRawItems().map((item) => item.id)).toEqual(scenario === "provider 403" ? ["retry-me"] : []);
+    expect(await readFile(priorHtml, "utf8")).toBe("published edition");
+    expect(await readFile(priorAudit, "utf8")).toBe("published selection");
+  } finally {
+    repository.close();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
 
 async function stableArtifacts(result: PipelineResult, databasePath: string): Promise<Record<string, unknown>> {
   const outputDir = dirname(result.markdownPath);
