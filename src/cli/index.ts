@@ -1,4 +1,5 @@
 import { config as loadDotenvFile } from "dotenv";
+import { sep } from "node:path";
 import { loadConfig, loadEnvFiles, type AppConfig } from "../config/env.js";
 import { collectIntoSqlite } from "../collectors/collectNews.js";
 import { openNewsRepository } from "../db/newsRepository.js";
@@ -8,6 +9,7 @@ import { runScreening } from "../pipeline/screening.js";
 import { runSelection } from "../pipeline/selectionStage.js";
 import { runTextRendering } from "../pipeline/textRendering.js";
 import { runWeeklyPipeline } from "../pipeline/weeklyPipeline.js";
+import { editionTime } from "../pipeline/edition.js";
 
 interface CliOptions {
   command: string;
@@ -23,6 +25,11 @@ async function main(): Promise<void> {
   applyConfigFile(options);
   const config = buildConfig(options);
 
+  if (options.command === "output-dir") {
+    console.log(config.OUTPUT_DIR.split(sep).join("/"));
+    return;
+  }
+
   if (options.command === "init-db") {
     const repository = openNewsRepository(config.DATABASE_PATH);
     repository.close();
@@ -31,18 +38,19 @@ async function main(): Promise<void> {
   }
 
   if (options.command === "collect" || options.command === "ingest") {
-    const result = await collectIntoSqlite(config);
+    const result = await collectIntoSqlite(config, new Date(editionTime(options.date)));
     console.log(`Collected ${result.items.length} item(s).`);
     console.log(`Inserted ${result.inserted} new raw item(s); skipped ${result.skippedDuplicates} duplicate(s).`);
     console.log(`Marked ${result.markedDuplicates} likely duplicate(s).`);
     if (result.failures.length > 0) {
       console.log(`Collection failures: ${result.failures.length}`);
+      if (!result.items.length) throw new Error("All collection results are empty after source failures.");
     }
     return;
   }
 
   if (options.command === "screen" || options.command === "screening") {
-    const result = await runScreening(config);
+    const result = await runScreening(config, editionTime(options.date));
     console.log(`Screened ${result.processed} item(s).`);
     console.log(`Candidates: ${result.candidates}; excluded: ${result.excluded}; errors: ${result.errors}.`);
     return;
@@ -56,7 +64,7 @@ async function main(): Promise<void> {
   }
 
   if (options.command === "generate-article" || options.command === "articles" || options.command === "article-generation") {
-    const result = await runArticleGeneration(config);
+    const result = await runArticleGeneration(config, editionTime(options.date));
     console.log(`Generated article content for ${result.generated} selected item(s).`);
     console.log(`Fallback article content used for ${result.fallback} item(s).`);
     return;
@@ -157,7 +165,7 @@ function buildConfig(options: CliOptions): AppConfig {
     env.VIDEO_COMPOSER_MODE = "mock";
   }
   if (options.limit !== undefined) {
-    env.MAX_ITEMS_TOTAL = String(options.limit);
+    if (["collect", "ingest", "screen", "screening"].includes(options.command)) env.MAX_ITEMS_TOTAL = String(options.limit);
     env.DAILY_ITEM_COUNT = String(options.limit);
   }
   return loadConfig(env);

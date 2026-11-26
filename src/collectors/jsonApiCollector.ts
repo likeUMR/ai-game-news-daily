@@ -43,8 +43,9 @@ export class JsonApiCollector implements Collector {
       }
 
       try {
-        const sourceItems = await adapter.fetchItems(source, this.fetchImpl, this.timeoutMs, now);
-        items.push(...sourceItems.slice(0, source.max_items_per_window ?? this.maxItemsPerSource));
+        const limit = Math.min(source.max_items_per_window ?? this.maxItemsPerSource, this.maxItemsPerSource);
+        const sourceItems = await adapter.fetchItems({ ...source, max_items_per_window: limit }, this.fetchImpl, this.timeoutMs, now);
+        items.push(...sourceItems.slice(0, limit));
       } catch (error) {
         failures.push({
           sourceId: source.id,
@@ -60,6 +61,27 @@ export class JsonApiCollector implements Collector {
 }
 
 const sourceAdapters: Record<string, JsonApiSourceAdapter> = {
+  gcores: {
+    async fetchItems(source, fetchImpl, timeoutMs, now) {
+      const params = new URLSearchParams({ "filter[is-news]": "1", sort: "-published-at", "page[limit]": String(source.max_items_per_window) });
+      const payload = await fetchJson(`https://www.gcores.com/gapi/v1/articles?${params}`, fetchImpl, timeoutMs);
+      return readArray(payload, ["data"]).flatMap((record) => {
+        const article = record.attributes;
+        if (!isRecord(article) || !/^\d+$/.test(String(record.id))) return [];
+        const timestamp = Date.parse(String(article["published-at"]));
+        const title = cleanText(article.title);
+        if (!title || !Number.isFinite(timestamp)) return [];
+        const excerpt = cleanText(article.excerpt) || cleanText(article.desc);
+        return [{
+          title, url: `https://www.gcores.com/articles/${record.id}`,
+          source_name: source.name, source_type: source.source_type,
+          published_at: new Date(timestamp).toISOString(), collected_at: now.toISOString(),
+          author: null, excerpt, raw_content: [title, excerpt].filter(Boolean).join("\n\n"),
+          metadata: { collector: "json_api", source_id: source.id }
+        }];
+      });
+    }
+  },
   youxituoluo: {
     async fetchItems(source, fetchImpl, timeoutMs, now) {
       const limit = source.max_items_per_window ?? 20;
@@ -71,7 +93,8 @@ const sourceAdapters: Record<string, JsonApiSourceAdapter> = {
         const aid = numberLikeToString(record.aid);
         const title = cleanText(record.title);
         const url = aid ? normalizeCollectedUrl(`https://www.youxituoluo.com/${aid}.html`) : null;
-        if (!title || !url) {
+        const publishedAt = parseUnixTimestamp(record.sendtime);
+        if (!title || !url || !publishedAt) {
           return [];
         }
 
@@ -81,7 +104,7 @@ const sourceAdapters: Record<string, JsonApiSourceAdapter> = {
           url,
           source_name: source.name,
           source_type: source.source_type,
-          published_at: parseUnixTimestamp(record.sendtime) ?? collectedAt,
+          published_at: publishedAt,
           collected_at: collectedAt,
           author: null,
           excerpt,
@@ -173,12 +196,13 @@ function readArray(payload: unknown, path: string[]): Record<string, unknown>[] 
   let current = payload;
   for (const key of path) {
     if (!current || typeof current !== "object" || !(key in current)) {
-      return [];
+      throw new Error("News API response is missing its article list.");
     }
     current = (current as Record<string, unknown>)[key];
   }
 
-  return Array.isArray(current) ? current.filter(isRecord) : [];
+  if (!Array.isArray(current)) throw new Error("News API article list is malformed.");
+  return current.filter(isRecord);
 }
 
 function parseJsonp(text: string): Record<string, unknown> {
@@ -215,7 +239,8 @@ export function extractGamerskyItems(html: string, source: SourceDefinition, col
 
     seen.add(url);
     const excerpt = cleanText(stripTags(block.match(/<div\b[^>]*class=["']txt["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? ""));
-    const publishedAt = parseGamerskyTime(block.match(/<div\b[^>]*class=["']time["'][^>]*>([\s\S]*?)<\/div>/i)?.[1]) ?? collectedAt;
+    const publishedAt = parseGamerskyTime(block.match(/<div\b[^>]*class=["']time["'][^>]*>([\s\S]*?)<\/div>/i)?.[1]);
+    if (!publishedAt) continue;
 
     items.push({
       title,

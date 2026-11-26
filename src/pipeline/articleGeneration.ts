@@ -5,6 +5,7 @@ import type { NewsRepository } from "../db/newsRepository.js";
 import { openNewsRepository } from "../db/newsRepository.js";
 import { canonicalizeUrl } from "./dedupe.js";
 import type { NewsItem } from "./types.js";
+import { publicationWindow } from "./edition.js";
 
 export interface ArticleGenerationResult {
   items: NewsItem[];
@@ -13,10 +14,10 @@ export interface ArticleGenerationResult {
   validationFailures: Array<{ itemId: string; reasons: string[] }>;
 }
 
-export async function runArticleGeneration(config: AppConfig): Promise<ArticleGenerationResult> {
+export async function runArticleGeneration(config: AppConfig, asOf = new Date().toISOString()): Promise<ArticleGenerationResult> {
   const repository = openNewsRepository(config.DATABASE_PATH);
   try {
-    const selectedItems = repository.selectCandidates(config.DAILY_ITEM_COUNT, config.MIN_CROSS_RELEVANCE_SCORE);
+    const selectedItems = repository.listEditionItems(publicationWindow(asOf, config.COLLECTION_WINDOW_HOURS), config.MOCK_MODE, true).slice(0, config.DAILY_ITEM_COUNT);
     return await generateArticlesForSelectedItems(repository, createAIProvider(config), selectedItems);
   } finally {
     repository.close();
@@ -44,19 +45,9 @@ export async function generateArticlesForSelectedItems(
 ): Promise<ArticleGenerationResult> {
   const selectedItems = items.filter((item) => item.selected);
   const groups = groupSelectedByCategory(selectedItems);
-  let generatedEntries: Map<string, GeneratedArticleFields>;
-
-  try {
-    const response = await provider.generateArticleEntries(groups);
-    generatedEntries = new Map(response.entries.map((entry) => [entry.id, {
-      articleTitle: entry.articleTitle,
-      articleBody: entry.articleBody,
-      introSummary: entry.introSummary,
-      sourceLinks: entry.sourceLinks
-    }]));
-  } catch {
-    generatedEntries = new Map();
-  }
+  if (!groups.length) return { items, generated: 0, fallback: 0, validationFailures: [] };
+  const response = await provider.generateArticleEntries(groups);
+  const generatedEntries = new Map(response.entries.map((entry) => [entry.id, entry]));
 
   const validationFailures: ArticleGenerationResult["validationFailures"] = [];
   let generated = 0;
@@ -255,8 +246,9 @@ function comparisonTokens(value: string): string[] {
 
 function preserveSourceLinks(item: NewsItem, proposedLinks: string[]): string[] {
   const links = new Map<string, string>();
+  const allowed = new Set([item.sourceUrl, ...item.officialSources].map(canonicalizeUrl));
   for (const link of [...proposedLinks, ...item.officialSources, item.sourceUrl]) {
-    if (isValidHttpUrl(link)) {
+    if (isValidHttpUrl(link) && allowed.has(canonicalizeUrl(link))) {
       const canonical = canonicalizeUrl(link);
       if (!links.has(canonical)) {
         links.set(canonical, link);

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { NewsRepository } from "../db/newsRepository.js";
 import type { NewsItem, TimelineEvent, TtsSegment } from "../pipeline/types.js";
+import { editionDay } from "../pipeline/edition.js";
 import { createTTSProvider, type TTSProvider } from "./ttsProvider.js";
 
 export interface NarrationPlan {
@@ -25,7 +26,7 @@ export async function planVideoNarration(
   items: NewsItem[],
   options: NarrationPlanOptions
 ): Promise<NarrationPlan> {
-  const date = options.generatedAt.slice(0, 10);
+  const date = editionDay(options.generatedAt);
   const outputDir = join(options.outputRoot, date);
   const audioDir = join(outputDir, "audio");
   const provider = options.ttsProvider ?? createTTSProvider(options.ttsProviderName ?? "mock");

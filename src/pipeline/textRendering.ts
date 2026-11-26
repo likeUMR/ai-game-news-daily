@@ -14,6 +14,7 @@ import { generateArticlesForSelectedItems } from "./articleGeneration.js";
 import { markDuplicateNewsItems } from "./dedupe.js";
 import { parseCategoryCounts, selectAndVerifyItems } from "./selection.js";
 import type { NewsItem } from "./types.js";
+import { editionDay, editionTime, publicationWindow, requireEditionItems, writeEditionFile } from "./edition.js";
 
 export interface TextRenderingResult {
   generatedAt: string;
@@ -30,8 +31,8 @@ export interface TextRenderingOptions {
 }
 
 export async function runTextRendering(config: AppConfig, options: TextRenderingOptions = {}): Promise<TextRenderingResult> {
-  const generatedAt = normalizeGeneratedAt(options.date);
-  const date = generatedAt.slice(0, 10);
+  const generatedAt = editionTime(options.date);
+  const date = editionDay(generatedAt);
   const outputDir = join(config.OUTPUT_DIR, date);
 
   await mkdir(outputDir, { recursive: true });
@@ -40,6 +41,7 @@ export async function runTextRendering(config: AppConfig, options: TextRendering
   const repository = openNewsRepository(config.DATABASE_PATH);
   try {
     const selectedItems = await loadSelectedItems(repository, config, generatedAt);
+    if (!config.MOCK_MODE) requireEditionItems(selectedItems.length, date);
     const articleGenerationResult = await generateArticlesForSelectedItems(repository, createAIProvider(config), selectedItems);
     const finalItems = articleGenerationResult.items.filter((item) => item.selected);
     const dailyMarkdown = renderDailyMarkdown(finalItems, generatedAt);
@@ -53,7 +55,7 @@ export async function runTextRendering(config: AppConfig, options: TextRendering
     await Promise.all([
       writeFile(dailyMarkdownPath, dailyMarkdown, "utf8"),
       writeFile(zhihuMarkdownPath, zhihuMarkdown, "utf8"),
-      writeFile(wechatHtmlPath, wechatHtml, "utf8")
+      writeEditionFile(wechatHtmlPath, wechatHtml)
     ]);
 
     const run = repository.savePipelineRun({
@@ -113,22 +115,9 @@ export async function runTextRendering(config: AppConfig, options: TextRendering
   }
 }
 
-function normalizeGeneratedAt(date?: string): string {
-  if (!date) {
-    return new Date().toISOString();
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
-    return `${date}T00:00:00.000Z`;
-  }
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`Invalid --date value: ${date}`);
-  }
-  return parsed.toISOString();
-}
-
 async function loadSelectedItems(repository: NewsRepository, config: AppConfig, generatedAt: string): Promise<NewsItem[]> {
-  const persistedCandidates = repository.selectCandidates(config.DAILY_ITEM_COUNT, config.MIN_CROSS_RELEVANCE_SCORE);
+  const persistedCandidates = repository.listEditionItems(publicationWindow(generatedAt, config.COLLECTION_WINDOW_HOURS), config.MOCK_MODE, true)
+    .slice(0, config.DAILY_ITEM_COUNT);
   if (persistedCandidates.length > 0 || !config.MOCK_MODE) {
     return persistedCandidates;
   }

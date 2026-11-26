@@ -118,6 +118,7 @@ export const promptTemplates: Record<PromptName, string> = {
     "If you cannot produce a high-quality Chinese introSummary from the supplied context, do not return a low-quality placeholder.",
     "Do not invent facts beyond the supplied context.",
     "Use strictFacts as the hard factual boundary for each item.",
+    "Preserve the source's degree of certainty in Chinese. Attribute predictions to the speaker and reported metrics to their source or test context. Do not turn a possibility into a headline claim or invent quotes.",
     "Respect missingDetails: do not fill absent details just to make the entry sound complete.",
     "When the supplied context is sparse, keep the entry sparse too: say what is currently confirmed instead of adding capabilities, metrics, dates, names, mechanisms, or effects not present in the context.",
     "For sparse items, use this articleBody shape: point 1 starts with 当前可确认; point 2 starts with 原始材料未提供 and lists the missing detail boundaries; point 3 starts with 观察重点 and only references supplied tags or category.",

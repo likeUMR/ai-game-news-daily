@@ -10,6 +10,8 @@ import { MarkdownCollector } from "./markdownCollector.js";
 import { RssCollector } from "./rssCollector.js";
 import type { CollectionResult, Collector, RawCollectedItem } from "./types.js";
 import { WebPageCollector } from "./webPageCollector.js";
+import { hasAiSignal } from "./rulePrefilter.js";
+import { publicationWindow } from "../pipeline/edition.js";
 
 export interface PersistedCollectionResult extends CollectionResult {
   inserted: number;
@@ -19,6 +21,7 @@ export interface PersistedCollectionResult extends CollectionResult {
   windowStart: string;
   windowEnd: string;
   limitedOut: number;
+  outsideWindow: number;
 }
 
 export interface CollectionSourceAudit {
@@ -44,7 +47,7 @@ export interface CollectionSourceAudit {
   }>;
 }
 
-export async function collectIntoSqlite(config: AppConfig): Promise<PersistedCollectionResult> {
+export async function collectIntoSqlite(config: AppConfig, asOf = new Date()): Promise<PersistedCollectionResult> {
   const sources = getSourceRegistry();
   const collectors: Collector[] = config.MOCK_MODE
     ? [new DemoCollector(), new MarkdownCollector({ manualDir: join(config.DATA_DIR, "manual") })]
@@ -61,10 +64,11 @@ export async function collectIntoSqlite(config: AppConfig): Promise<PersistedCol
       repository,
       sources,
       collectors,
-      new Date(),
+      asOf,
       config.MAX_ITEMS_TOTAL,
       config.DEDUPE_WINDOW_HOURS,
-      config.COLLECTION_WINDOW_HOURS
+      config.COLLECTION_WINDOW_HOURS,
+      new Date()
     );
   } finally {
     repository.close();
@@ -78,10 +82,10 @@ export async function collectWithCollectors(
   now = new Date(),
   maxItemsTotal = 500,
   dedupeWindowHours = 72,
-  collectionWindowHours = 24
+  collectionWindowHours = 24,
+  fetchedAt = now
 ): Promise<PersistedCollectionResult> {
-  const windowStart = new Date(now.getTime() - collectionWindowHours * 60 * 60 * 1000).toISOString();
-  const windowEnd = now.toISOString();
+  const { start: windowStart, end: windowEnd } = publicationWindow(now.toISOString(), collectionWindowHours);
   const sourceAudits = initializeSourceAudits(sources, collectors);
   const result: PersistedCollectionResult = {
     items: [],
@@ -92,11 +96,12 @@ export async function collectWithCollectors(
     sourceAudits,
     windowStart,
     windowEnd,
-    limitedOut: 0
+    limitedOut: 0,
+    outsideWindow: 0
   };
 
   for (const collector of collectors) {
-    const collected = await collector.collect(sources, now);
+    const collected = await collector.collect(sources, fetchedAt);
     result.failures.push(...collected.failures);
     result.items.push(...collected.items);
     for (const failure of collected.failures) {
@@ -111,10 +116,16 @@ export async function collectWithCollectors(
   }
 
   const collectedAfter = new Date(now.getTime() - dedupeWindowHours * 60 * 60 * 1000).toISOString();
-  const itemsToPersist = result.items.slice(0, maxItemsTotal);
-  result.limitedOut = Math.max(0, result.items.length - itemsToPersist.length);
+  const eligible = result.items.filter((item) => {
+    const published = Date.parse(item.published_at);
+    return published >= Date.parse(windowStart) && published <= now.getTime();
+  }).sort((left, right) =>
+    Number(hasAiSignal(`${right.title} ${right.raw_content}`)) - Number(hasAiSignal(`${left.title} ${left.raw_content}`))
+    || Date.parse(right.published_at) - Date.parse(left.published_at));
+  result.outsideWindow = result.items.length - eligible.length;
+  result.limitedOut = Math.max(0, eligible.length - maxItemsTotal);
 
-  for (const item of result.items.slice(0, maxItemsTotal)) {
+  for (const item of eligible.slice(0, maxItemsTotal)) {
     const persistResult = persistRawItem(repository, sources, item, collectedAfter);
     const audit = findAuditForRawItem(sourceAudits, sources, item);
     if (persistResult === "inserted") {
@@ -137,7 +148,7 @@ export async function collectWithCollectors(
     }
   }
 
-  for (const item of result.items.slice(maxItemsTotal)) {
+  for (const item of eligible.slice(maxItemsTotal)) {
     const audit = findAuditForRawItem(sourceAudits, sources, item);
     if (audit) {
       audit.limitedOut += 1;
@@ -158,6 +169,8 @@ export async function writeCollectionAudit(outputDir: string, result: PersistedC
     windowEnd: result.windowEnd,
     totals: {
       fetched: result.items.length,
+      withinWindow: result.items.length - result.outsideWindow,
+      outsideWindow: result.outsideWindow,
       inserted: result.inserted,
       skippedDuplicates: result.skippedDuplicates,
       markedDuplicates: result.markedDuplicates,

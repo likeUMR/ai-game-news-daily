@@ -10,9 +10,13 @@ const lowTrustSourceIds = new Set(["3dm", "gamersky"]);
 
 const aiSignals = [
   /(?:^|[^a-z])ai(?:[^a-z]|$)/i,
-  /aigc|llm|agent/i,
-  /人工智能|大模型|智能体|生成式|机器学习|神经网络|ai聊天|聊天ai/i
+  /\b(?:aigc|llms?|agents?|gpt[\d-]*|chatgpt|gemini|claude|deepseek|dlss|nvidia ace|machine learning|generative|neural|reinforcement learning)\b/i,
+  /人工智能|大模型|智能体|生成式|机器学习|深度学习|强化学习|神经网络|世界模型|扩散模型|动作生成|语音合成|智能NPC/i
 ];
+
+export function hasAiSignal(content: string): boolean {
+  return matchesAny(content, aiSignals);
+}
 
 const gameSignals = [
   /游戏|手游|端游|主机|玩家|电竞|steam|xbox|playstation|ps5|switch|任天堂|索尼|微软|腾讯|网易|nvidia|r星|育碧|米哈游|工作室|开发商|发行商/i

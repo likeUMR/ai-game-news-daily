@@ -1,12 +1,14 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   canonicalizeUrl,
   hashContent,
+  initializeDatabase,
   openNewsRepository,
-  type NewsRepository
+  NewsRepository
 } from "../src/db/newsRepository.js";
 import type { NewsItem } from "../src/pipeline/types.js";
 
@@ -112,6 +114,8 @@ describe("NewsRepository", () => {
     });
 
     const saved = repository.saveProcessedFields({ ...item, rawItemId: raw.id });
+    repository.saveProcessedFields({ id: item.id, articleBody: "Edited article body" });
+    expect(repository.listPendingRawItems()).toHaveLength(0);
     const reloaded = repository.getProcessedItem("processed-1");
     const candidates = repository.selectCandidates(5, 80);
     const dedupeItems = repository.listRecentItemsForDedupe(10);
@@ -128,6 +132,37 @@ describe("NewsRepository", () => {
       rawItemId: raw.id,
       canonicalUrl: "https://example.com/candidate"
     });
+  });
+
+  test("repairs lost legacy links only when a matching source and screening audit prove them", () => {
+    const db = new Database(":memory:");
+    try {
+      initializeDatabase(db);
+      db.prepare("DELETE FROM schema_migrations WHERE version = 2").run();
+      const legacy = new NewsRepository(db);
+      const source = legacy.upsertSource({ name: "Source", type: "game_media", weight: 80 });
+      for (const id of ["audited", "missing-audit", "different-url", "model-error"]) {
+        const raw = legacy.insertRawItem({
+          id, sourceId: source.id, sourceUrl: `https://example.com/${id}`, rawContent: id,
+          publishedAt: "2026-05-19T00:00:00Z", collectedAt: "2026-05-19T01:00:00Z"
+        });
+        legacy.saveProcessedFields({
+          id, sourceUrl: id === "different-url" ? "https://example.com/other" : raw.sourceUrl,
+          exclusionReason: id === "model-error" ? "ai enrichment failed: HTTP 403" : ""
+        });
+        if (id !== "missing-audit") {
+          legacy.saveProcessingAudit({ rawItemId: id, processedItemId: id, stage: "screening", status: "excluded", message: "Legacy decision" });
+        }
+      }
+      initializeDatabase(db);
+      initializeDatabase(db);
+      expect(legacy.findProcessedItemIdByRawItemId("audited")).toBe("audited");
+      expect(legacy.findProcessedItemIdByRawItemId("different-url")).toBeNull();
+      expect(legacy.findProcessedItemIdByRawItemId("missing-audit")).toBeNull();
+      expect(legacy.listPendingRawItems().map((item) => item.id).sort()).toEqual(["different-url", "missing-audit", "model-error"]);
+    } finally {
+      db.close();
+    }
   });
 
   test("saves generated outputs for pipeline runs", async () => {

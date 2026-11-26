@@ -140,9 +140,9 @@ export const sourceRegistry = [
     priority: "high",
     source_weight: 82,
     suggested_frequency: "daily, about 4 game news items plus weekly roundup",
-    collection_strategy: "web_page",
+    collection_strategy: "json_api",
     max_items_per_window: 20,
-    notes: "Editorial coverage with strong community influence, collected from the /news HTML listing."
+    notes: "Public news articles API provides publisher timestamps and article excerpts."
   },
   {
     id: "chuapp",

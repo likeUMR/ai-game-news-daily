@@ -32,7 +32,7 @@ export class WebPageCollector implements Collector {
           items.push(...await this.collect3dmPages(source, now));
         } else {
           const html = await this.fetchHtml(source.url!, this.timeoutMs);
-          items.push(...extractListingLinks(html, source, now).slice(0, source.max_items_per_window ?? this.maxItemsPerSource));
+          items.push(...extractListingLinks(html, source, now).slice(0, Math.min(this.maxItemsPerSource, source.max_items_per_window ?? this.maxItemsPerSource)));
         }
       } catch (error) {
         failures.push({
@@ -67,12 +67,12 @@ export class WebPageCollector implements Collector {
   }
 
   private async collect3dmPages(source: SourceDefinition, now: Date): Promise<RawCollectedItem[]> {
-    const limit = source.max_items_per_window ?? this.maxItemsPerSource;
+    const limit = Math.min(this.maxItemsPerSource, source.max_items_per_window ?? this.maxItemsPerSource);
     const items: RawCollectedItem[] = [];
     const seen = new Set<string>();
     const maxPages = Math.max(1, Math.min(10, Math.ceil(limit / 20) + 1));
 
-    for (let page = 1; page <= maxPages && items.length < limit; page += 1) {
+    for (let page = 1; page <= maxPages; page += 1) {
       const html = await this.fetchHtml(create3dmPageUrl(source.url!, page), this.timeoutMs);
       const pageItems = extractListingLinks(html, source, now);
       if (pageItems.length === 0) {
@@ -82,9 +82,6 @@ export class WebPageCollector implements Collector {
         if (!seen.has(item.url)) {
           seen.add(item.url);
           items.push(item);
-        }
-        if (items.length >= limit) {
-          break;
         }
       }
     }
@@ -104,7 +101,7 @@ export function extractListingLinks(html: string, source: SourceDefinition, now 
   }
 
   const siteSpecificItems = extractSiteSpecificItems(html, source, now);
-  if (siteSpecificItems.length > 0) {
+  if (["gcores", "chuapp", "3dm"].includes(source.id)) {
     return siteSpecificItems;
   }
 
@@ -116,10 +113,11 @@ export function extractListingLinks(html: string, source: SourceDefinition, now 
   for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
     const attrs = match[1] ?? "";
     const href = attrs.match(/\bhref=["']([^"']+)["']/i)?.[1];
+    const timestamp = Date.parse((match[2] ?? "").match(/<time\b[^>]*\bdatetime=["']([^"']+)["']/i)?.[1] ?? "");
     const title = cleanText(stripTags(match[2] ?? ""));
     const url = href ? normalizeCollectedUrl(href, source.url) : null;
 
-    if (!url || !title || title.length < 4 || seen.has(url) || !isSameOriginUrl(url, source.url)) {
+    if (!Number.isFinite(timestamp) || !url || !title || title.length < 4 || seen.has(url) || !isSameOriginUrl(url, source.url)) {
       continue;
     }
 
@@ -129,7 +127,7 @@ export function extractListingLinks(html: string, source: SourceDefinition, now 
       url,
       source_name: source.name,
       source_type: source.source_type,
-      published_at: collectedAt,
+      published_at: new Date(timestamp).toISOString(),
       collected_at: collectedAt,
       author: null,
       excerpt: pageExcerpt,
@@ -170,9 +168,9 @@ function extractChuappDailyItems(html: string, source: SourceDefinition, now: Da
     const excerpt = cleanText(body.match(/<dd>([\s\S]*?)<\/dd>\s*$/i)?.[1] ?? "");
     const author = cleanText(body.match(/<em>([\s\S]*?)<\/em>/i)?.[1] ?? "") || null;
     const timeText = cleanText(body.match(/<\/em>([^<]+)<\/span>/i)?.[1] ?? "");
-    const publishedAt = parseChineseListingTime(timeText, now) ?? collectedAt;
+    const publishedAt = parseChineseListingTime(timeText, now);
 
-    if (!url || !title || seen.has(url)) {
+    if (!url || !title || !publishedAt || seen.has(url)) {
       continue;
     }
 
@@ -192,9 +190,9 @@ function extractGcoresNewsItems(html: string, source: SourceDefinition, now: Dat
     const url = normalizeCollectedUrl(match[1] ?? "", source.url);
     const title = cleanText(match[2] ?? "");
     const timeText = cleanText(stripTags(match[3] ?? ""));
-    const publishedAt = parseChineseListingTime(timeText, now) ?? collectedAt;
+    const publishedAt = parseChineseListingTime(timeText, now);
 
-    if (!url || !title || seen.has(url)) {
+    if (!url || !title || !publishedAt || seen.has(url)) {
       continue;
     }
 
@@ -215,9 +213,9 @@ function extract3dmNewsItems(html: string, source: SourceDefinition, now: Date):
     const title = cleanText(match[2] ?? "");
     const timeText = cleanText(stripTags(match[3] ?? ""));
     const excerpt = cleanText(match[4] ?? "");
-    const publishedAt = parseChineseListingTime(timeText, now) ?? collectedAt;
+    const publishedAt = parseChineseListingTime(timeText, now);
 
-    if (!url || !title || seen.has(url)) {
+    if (!url || !title || !publishedAt || seen.has(url)) {
       continue;
     }
 

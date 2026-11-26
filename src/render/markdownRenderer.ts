@@ -1,5 +1,7 @@
 ﻿import type { NewsItem } from "../pipeline/types.js";
 
+import { editionDay } from "../pipeline/edition.js";
+
 export interface DailyTextRenderOptions {
   title?: string;
 }
@@ -369,7 +371,7 @@ function firstNonEmpty(...values: string[]): string {
 
 function formatDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? value : editionDay(date);
 }
 
 function formatDateTime(value: string): string {

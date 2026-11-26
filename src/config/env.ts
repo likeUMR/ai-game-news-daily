@@ -24,7 +24,7 @@ const booleanFromEnv = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
-const providerSchema = z.enum(["mock", "openai", "anthropic", "google", "local"]);
+const providerSchema = z.enum(["mock", "openai", "deepseek", "anthropic", "google", "local"]);
 const ttsProviderSchema = z.enum(["mock", "openai", "edge", "local"]);
 
 const rawEnvSchema = z.object({

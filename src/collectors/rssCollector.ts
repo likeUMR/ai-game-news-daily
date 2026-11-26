@@ -28,7 +28,8 @@ export class RssCollector implements Collector {
     for (const source of rssSources) {
       try {
         const xml = await this.fetchText(source.url!, this.timeoutMs);
-        items.push(...parseFeedXml(xml, source, now).slice(0, source.max_items_per_window ?? this.maxItemsPerSource));
+        if (!/<(?:rss|feed|rdf:RDF)\b/i.test(xml)) throw new Error("Source returned a non-feed document.");
+        items.push(...parseFeedXml(xml, source, now).slice(0, Math.min(source.max_items_per_window ?? this.maxItemsPerSource, this.maxItemsPerSource)));
       } catch (error) {
         failures.push({
           sourceId: source.id,
@@ -72,7 +73,8 @@ export function parseFeedXml(xml: string, source: SourceDefinition, now = new Da
 
     const excerpt = cleanText(readTag(block, "description") || readTag(block, "summary"));
     const rawContent = cleanText(readTag(block, "content:encoded") || readTag(block, "content") || excerpt || title);
-    const publishedAt = parseDate(readTag(block, "pubDate") || readTag(block, "published") || readTag(block, "updated")) ?? collectedAt;
+    const publishedAt = parseDate(readTag(block, "pubDate") || readTag(block, "published") || readTag(block, "updated"));
+    if (!publishedAt) return [];
     const author = cleanText(readTag(block, "dc:creator") || readTag(block, "author") || readTag(block, "name")) || null;
 
     return [{

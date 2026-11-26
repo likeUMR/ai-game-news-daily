@@ -227,7 +227,7 @@ describe("collectors", () => {
       if (url.includes("bad")) {
         throw new Error("network failed");
       }
-      return new Response("<rss><channel><item><title>Good item</title><link>https://example.com/good</link><description>Body</description></item></channel></rss>");
+      return new Response("<rss><channel><item><title>Good item</title><link>https://example.com/good</link><pubDate>2026-05-18T23:30:00Z</pubDate><description>Body</description></item></channel></rss>");
     };
 
     const result = await collectWithCollectors(
@@ -285,6 +285,7 @@ describe("collectors", () => {
           title: "AI NPC tools launch for live ops",
           url: "https://example.com/old",
           raw_content: "A game studio launched AI NPC tooling for live operations teams.",
+          published_at: "2026-05-15T22:00:00.000Z",
           collected_at: "2026-05-15T23:00:00.000Z"
         })
       ])],

@@ -56,7 +56,7 @@ describe("screenPendingRawItems", () => {
     expect(applySourceWeight(55, 90)).toBe(65);
     expect(result).toMatchObject({ processed: 1, candidates: 1, excluded: 0, errors: 0 });
     expect(processed?.isTopicCandidate).toBe(true);
-    expect(processed?.selected).toBe(true);
+    expect(processed?.selected).toBe(false);
     expect(processed?.summary).toContain("summary");
     expect(processed?.keywords).toEqual(["AI", "game"]);
     expect(processed?.aiTags).toEqual(["tooling"]);

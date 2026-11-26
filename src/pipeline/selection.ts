@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { NewsItem } from "./types.js";
+import { writeEditionFile } from "./edition.js";
 
 export interface SelectionOptions {
   generatedAt: string;
@@ -23,6 +24,8 @@ export interface SelectionEvidence {
 
 export interface AuditEntry {
   id: string;
+  isMock: boolean;
+  article?: Pick<NewsItem, "articleTitle" | "articleBody" | "introSummary" | "publishedAt">;
   title: string;
   category: string;
   sourceName: string;
@@ -96,9 +99,7 @@ export function selectAndVerifyItems(items: NewsItem[], options: SelectionOption
       : buildEvidenceFallbackCandidate(candidate, verification.reasons);
     if (verifiedCandidate && candidate.isTopicCandidate) {
       eligible.push(verifiedCandidate);
-    } else if (verification.ok && candidate.isTopicCandidate) {
-      eligible.push(candidate);
-    } else if (verification.ok) {
+    } else if (!candidate.isTopicCandidate) {
       rejected.push(toAuditEntry(candidate, options, [candidate.exclusionReason || "not a topic candidate"]));
     } else {
       failedVerification.push(toAuditEntry(candidate, options, verification.reasons));
@@ -135,11 +136,11 @@ export function selectAndVerifyItems(items: NewsItem[], options: SelectionOption
   return { items: normalized, audit };
 }
 
-export async function writeSelectionAudit(outputDir: string, audit: SelectionAudit): Promise<string> {
+export async function writeSelectionAudit(outputDir: string, audit: SelectionAudit, filename = "editorial-selection-audit.json"): Promise<string> {
   const auditDir = join(outputDir, "audit");
   await mkdir(auditDir, { recursive: true });
-  const auditPath = join(auditDir, "editorial-selection-audit.json");
-  await writeFile(auditPath, `${JSON.stringify(audit, null, 2)}\n`, "utf8");
+  const auditPath = join(auditDir, filename);
+  await writeEditionFile(auditPath, `${JSON.stringify(audit, null, 2)}\n`);
   return auditPath;
 }
 
@@ -175,7 +176,7 @@ function verifyItem(item: NewsItem, options: SelectionOptions): VerificationResu
     ? (generatedAt - publishedAt) / 3_600_000
     : Number.NaN;
 
-  if (!isValidHttpUrl(item.sourceUrl) && item.collectedAt.trim().length === 0) {
+  if (!isValidHttpUrl(item.sourceUrl) || item.collectedAt.trim().length === 0) {
     reasons.push("source URL missing or was not collected successfully");
   }
   if (item.articleTitle.trim().length === 0) {
@@ -375,6 +376,7 @@ function freshnessRank(item: NewsItem, generatedAt: string): number {
 function toAuditEntry(item: NewsItem, options: SelectionOptions, reasons: string[]): AuditEntry {
   return {
     id: item.id,
+    isMock: item.isMock === true,
     title: item.articleTitle,
     category: item.category,
     sourceName: item.sourceName,

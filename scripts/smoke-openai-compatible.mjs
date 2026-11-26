@@ -1,80 +1,37 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { parse as parseDotenv } from "dotenv";
+import "tsx/esm";
+import { URL } from "node:url";
 
-loadEnvFiles();
+const { loadConfig, loadEnvFiles } = await import("../src/config/env.ts");
+const { resolveModelConnection } = await import("../src/ai/modelConnection.ts");
+const { OpenAICompatibleProvider } = await import("../src/ai/openAiCompatibleProvider.ts");
 
-const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY ?? process.env.LLM_TOKEN ?? process.env.OPENAI_API_KEY;
-const baseUrl = process.env.OPENAI_COMPATIBLE_BASE_URL ?? process.env.LLM_BASE_URL ?? "https://api.openai.com/v1";
-const model = process.env.OPENAI_COMPATIBLE_MODEL ?? process.env.LLM_MODEL ?? "gpt-4o-mini";
-
-if (!apiKey) {
-  throw new Error("OPENAI_COMPATIBLE_API_KEY, LLM_TOKEN, or OPENAI_API_KEY is required for the LLM smoke test.");
-}
-
-const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(), 30000);
-
-try {
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: "You are a concise API smoke-test assistant." },
-        { role: "user", content: "Reply with exactly: relay-ok" }
-      ],
-      temperature: 0
-    }),
-    signal: controller.signal
+async function main() {
+  loadEnvFiles();
+  const { MODEL_PROVIDER } = loadConfig();
+  const connection = resolveModelConnection(process.env, MODEL_PROVIDER);
+  if (!connection) throw new Error("Missing key for the configured provider.");
+  const { baseUrl, model, apiKey } = connection;
+  if (connection.migratedFrom) console.log(`Configured ${connection.migratedFrom} resolves to ${model}.`);
+  const response = await fetch(`${baseUrl}/models`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    redirect: "error",
+    signal: globalThis.AbortSignal.timeout(15000)
   });
-
-  const bodyText = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`LLM smoke test failed with HTTP ${response.status}: ${redactSecret(bodyText, apiKey).slice(0, 500)}`);
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(bodyText);
-  } catch (error) {
-    throw new Error(`LLM smoke test returned malformed JSON: ${redactSecret(bodyText, apiKey).slice(0, 500)}`, { cause: error });
-  }
-  const content = payload?.choices?.[0]?.message?.content;
-
-  if (typeof content !== "string" || content.trim().length === 0) {
-    throw new Error("LLM smoke test returned an empty assistant message.");
-  }
-
-  console.log(`LLM smoke test passed using model ${model} at ${baseUrl}.`);
-  console.log(`Assistant reply: ${content.trim().slice(0, 120)}`);
-} finally {
-  clearTimeout(timeout);
+  if (!response.ok) throw new Error(`Model list returned HTTP ${response.status}.`);
+  const models = (await response.json()).data.map((entry) => entry.id);
+  console.log(`${new URL(baseUrl).origin} lists ${models.length} models. Configured model ${model} listed=${models.includes(model)}.`);
+  if (!models.includes(model)) throw new Error("Configured model missing from this account's list.");
+  if (process.argv.includes("--list")) return;
+  const provider = new OpenAICompatibleProvider(connection);
+  await provider.classifyAndFilter({
+    articleTitle: "Game studio tests an AI tool",
+    sourceName: "Configuration check",
+    rawContent: "A game studio tested an AI-assisted translation tool on one game. This is a configuration check."
+  }, { minCrossRelevanceScore: 60 });
+  console.log("Production classification JSON passed schema validation.");
 }
 
-function redactSecret(value, secret) {
-  if (!secret) {
-    return value;
-  }
-  return value.split(secret).join("[REDACTED]");
-}
-
-function loadEnvFiles(appRoot = process.cwd()) {
-  const fileEnv = {};
-  for (const filename of [".env", ".env.local"]) {
-    const path = resolve(appRoot, filename);
-    if (existsSync(path)) {
-      Object.assign(fileEnv, parseDotenv(readFileSync(path)));
-    }
-  }
-  for (const [key, value] of Object.entries(fileEnv)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

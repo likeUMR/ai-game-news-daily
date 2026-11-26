@@ -5,7 +5,6 @@ import type { AppConfig } from "../config/env.js";
 import { collectMockNews } from "../collectors/mockCollector.js";
 import { collectIntoSqlite, writeCollectionAudit } from "../collectors/collectNews.js";
 import { enrichWithMockAi } from "../ai/mockAi.js";
-import { enrichWithProvider } from "../ai/mockProvider.js";
 import { openNewsRepository } from "../db/newsRepository.js";
 import {
   renderDailyMarkdown,
@@ -18,6 +17,8 @@ import { createVideoComposer, type VideoCompositionResult } from "../video/video
 import { createDistributionExportPackages } from "../distribution/exportPackages.js";
 import { markDuplicateNewsItems } from "./dedupe.js";
 import { generateArticlesForSelectedItems } from "./articleGeneration.js";
+import { editionDay, editionTime, publicationWindow, requireEditionItems, writeEditionFile } from "./edition.js";
+import { requireHealthyScreen, screenPendingRawItems, screeningOptions } from "./screening.js";
 import { parseCategoryCounts, selectAndVerifyItems, writeSelectionAudit } from "./selection.js";
 import type { PipelineResult, NewsItem } from "./types.js";
 
@@ -38,12 +39,13 @@ interface StageSummary {
 
 export async function runPipeline(config: AppConfig, options: RunPipelineOptions = {}): Promise<PipelineResult> {
 
-  const generatedAt = normalizeGeneratedAt(options.date);
+  const generatedAt = editionTime(options.date);
   const dailyItemCount = options.limit ?? config.DAILY_ITEM_COUNT;
   const runStartedAt = new Date().toISOString();
   const stages: StageSummary[] = [];
   const errors: Array<{ stage: string; message: string }> = [];
-  const date = generatedAt.slice(0, 10);
+  const date = editionDay(generatedAt);
+  const window = publicationWindow(generatedAt, config.COLLECTION_WINDOW_HOURS);
   const outputDir = join(config.OUTPUT_DIR, date);
   await mkdir(config.OUTPUT_DIR, { recursive: true });
   await mkdir(outputDir, { recursive: true });
@@ -92,68 +94,26 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
           collectionFailures: 0
         };
       } else {
-        // 1. 真实采集
-        const collection = await collectIntoSqlite(config);
+        const collection = await collectIntoSqlite(config, new Date(generatedAt));
         collectionAuditPath = await writeCollectionAudit(outputDir, collection);
+        if (!collection.items.length && collection.failures.length) {
+          throw new Error(`Collection returned no articles with ${collection.failures.length} source failure(s). See ${collectionAuditPath}`);
+        }
+        if (collection.failures.length) console.warn(`[collect] ${collection.failures.length} source failure(s). See ${collectionAuditPath}`);
         collectionSummary = {
           fetchedItems: collection.items.length,
+          withinWindow: collection.items.length - collection.outsideWindow,
+          outsideWindow: collection.outsideWindow,
           insertedItems: collection.inserted,
           skippedDuplicates: collection.skippedDuplicates,
           markedDuplicates: collection.markedDuplicates,
           collectionFailures: collection.failures.length,
           collectionAuditPath
         };
-        
-        // 2. 获取未处理的原始数据
-        const pendingRaw = repository.listPendingRawItems(config.MAX_ITEMS_TOTAL);
-        
-        // 3. 将 PendingRawItem 转换为 NewsItem
-        items = pendingRaw.map((raw) => {
-          const title = typeof raw.metadata.title === "string" ? raw.metadata.title : "";
-          return {
-            id: raw.id,
-            rawItemId: raw.id,
-            sourceUrl: raw.sourceUrl,
-            sourceName: raw.sourceName,
-            sourceType: raw.sourceType,
-            sourceWeight: raw.sourceWeight,
-            publishedAt: raw.publishedAt,
-            collectedAt: raw.collectedAt,
-            rawContent: raw.rawContent,
-            summary: "",
-            keywords: [],
-            category: "",
-            score: 0,
-            newsValueScore: 0,
-            duplicateOf: raw.duplicateOf,
-            selected: false,
-            isMock: false,
-            officialSources: [],
-            articleTitle: title,
-            articleBody: "",
-            introSummary: "",
-            assets: [],
-            scriptSegments: [],
-            ttsSegments: [],
-            timeline: [],
-            subtitleSrt: "",
-            aiRelevanceScore: 0,
-            gameRelevanceScore: 0,
-            crossRelevanceScore: 0,
-            aiTags: [],
-            gameTags: [],
-            isTopicCandidate: false,
-            exclusionReason: ""
-          };
-        });
-        
-        // 4. 去重
-        items = markDuplicateNewsItems(items);
       }
       return {
         value: items,
         summary: {
-          collectedItems: items.length,
           ...collectionSummary
         }
       };
@@ -161,39 +121,23 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
 
     enriched = await runStage(stages, errors, "screen", async () => {
       let items: NewsItem[] = [];
+      let screeningSummary = {};
       if (config.MOCK_MODE) {
         items = await enrichWithMockAi(collected, {
           minCrossRelevanceScore: config.MIN_CROSS_RELEVANCE_SCORE
         });
       } else {
         const provider = createAIProvider(config);
-        items = await enrichWithProvider(provider, collected, {
-          minCrossRelevanceScore: config.MIN_CROSS_RELEVANCE_SCORE
-        });
-
-        // 保存筛选结果与审计日志至 SQLite 数据库中
-        for (const item of orderForProcessedSave(items)) {
-          repository.saveProcessedFields({ ...item, rawItemId: item.id });
-          repository.saveProcessingAudit({
-            rawItemId: item.id,
-            processedItemId: item.id,
-            stage: "screening",
-            status: item.isTopicCandidate ? "processed" : "excluded",
-            message: item.isTopicCandidate ? "Item passed automated screening." : item.exclusionReason,
-            metadata: {
-              newsValueScore: item.newsValueScore,
-              crossRelevanceScore: item.crossRelevanceScore,
-              thresholds: {
-                minCrossRelevanceScore: config.MIN_CROSS_RELEVANCE_SCORE
-              }
-            }
-          });
-        }
+        const screened = await screenPendingRawItems(repository, provider, screeningOptions(config, generatedAt));
+        requireHealthyScreen(screened);
+        screeningSummary = screened;
+        items = repository.listEditionItems(window, false);
       }
       return {
         value: items,
         summary: {
-          processedItems: items.length,
+          ...screeningSummary,
+          editionItems: items.length,
           candidates: items.filter((item) => item.isTopicCandidate).length
         }
       };
@@ -208,14 +152,16 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
         lowTrustHighScore: config.LOW_TRUST_HIGH_SCORE,
         freshnessHours: config.SELECTION_FRESHNESS_HOURS
       });
-      
+      await writeSelectionAudit(outputDir, selected.audit, "latest-selection-attempt.json");
+      if (!config.MOCK_MODE) requireEditionItems(selected.audit.selected.length, date);
+
       if (!config.MOCK_MODE) {
         for (const item of selected.items) {
           repository.saveProcessedFields(item);
         }
       }
 
-      const audit = await writeSelectionAudit(outputDir, selected.audit);
+      const audit = join(outputDir, "audit", "editorial-selection-audit.json");
       return {
         value: { selection: selected, auditPath: audit },
         summary: {
@@ -233,7 +179,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
     const articleResult = await runStage(stages, errors, "generate-article", async () => {
       const generated = await generateArticlesForSelectedItems(
         repository,
-        createAIProvider(config.MOCK_MODE ? { ...config, MODEL_PROVIDER: "mock" } : config),
+        createAIProvider(config),
         selectedItems
       );
       return {
@@ -250,7 +196,6 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
     markdownPath = await runStage(stages, errors, "render-text", async () => {
       const dailyMarkdown = renderDailyMarkdown(selectedItems, generatedAt);
       const zhihuMarkdown = renderZhihuMarkdown(selectedItems, generatedAt);
-      const wechatHtml = renderWeChatHtml(selectedItems, generatedAt);
       const legacyPath = join(outputDir, "daily-report.md");
       dailyMarkdownPath = join(outputDir, "daily.md");
       zhihuMarkdownPath = join(outputDir, "zhihu.md");
@@ -258,8 +203,7 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
       await Promise.all([
         writeFile(legacyPath, dailyMarkdown, "utf8"),
         writeFile(dailyMarkdownPath, dailyMarkdown, "utf8"),
-        writeFile(zhihuMarkdownPath, zhihuMarkdown, "utf8"),
-        writeFile(wechatHtmlPath, wechatHtml, "utf8")
+        writeFile(zhihuMarkdownPath, zhihuMarkdown, "utf8")
       ]);
       return {
         value: legacyPath,
@@ -388,6 +332,14 @@ export async function runPipeline(config: AppConfig, options: RunPipelineOptions
 
     videoPlanPath = join(outputDir, "video-plan.json");
     await writeFile(videoPlanPath, `${JSON.stringify(videoPlan, null, 2)}\n`, "utf8");
+    await writeEditionFile(wechatHtmlPath, renderWeChatHtml(selectedItems, generatedAt));
+    const publishedAudit = selection.selection.audit;
+    const publishedItems = new Map(selectedItems.map((item) => [item.id, item]));
+    for (const entry of publishedAudit.selected) {
+      const { articleTitle, articleBody, introSummary, publishedAt } = publishedItems.get(entry.id)!;
+      entry.article = { articleTitle, articleBody, introSummary, publishedAt };
+    }
+    await writeSelectionAudit(outputDir, publishedAudit);
     runPath = join(outputDir, "pipeline-run.json");
 
     const result: PipelineResult = {
@@ -595,33 +547,4 @@ function formatStageSummary(summary?: Record<string, unknown>): string {
     .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
     .map(([key, value]) => `${key}=${String(value)}`);
   return entries.length > 0 ? ` ${entries.join(" ")}` : "";
-}
-
-function orderForProcessedSave(items: NewsItem[]): NewsItem[] {
-  const pendingIds = new Set(items.map((item) => item.id));
-  return [...items].sort((left, right) => {
-    const leftDependsOnPending = left.duplicateOf !== null && pendingIds.has(left.duplicateOf);
-    const rightDependsOnPending = right.duplicateOf !== null && pendingIds.has(right.duplicateOf);
-    if (leftDependsOnPending === rightDependsOnPending) {
-      return 0;
-    }
-    return leftDependsOnPending ? 1 : -1;
-  });
-}
-
-function normalizeGeneratedAt(date?: string): string {
-  if (!date) {
-    return new Date().toISOString();
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
-    return `${date}T00:00:00.000Z`;
-  }
-
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`Invalid --date value: ${date}`);
-  }
-
-  return parsed.toISOString();
 }

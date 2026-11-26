@@ -4,6 +4,8 @@ import type { AppConfig } from "../config/env.js";
 import { openNewsRepository, type NewsRepository } from "../db/newsRepository.js";
 import { renderWeeklyMarkdown, renderWeeklyHtml } from "../render/markdownRenderer.js";
 import type { NewsItem } from "./types.js";
+import { canonicalizeUrl } from "./dedupe.js";
+import { editionDay, editionTime, requireEditionItems, writeEditionFile } from "./edition.js";
 
 export interface WeeklyPipelineResult {
   generatedAt: string;
@@ -23,8 +25,9 @@ export interface WeeklyPipelineOptions {
 }
 
 export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipelineOptions = {}): Promise<WeeklyPipelineResult> {
-  const generatedAt = normalizeGeneratedAt(options.date);
-  const week = getIsoWeekInfo(generatedAt);
+  const generatedAt = editionTime(options.date);
+  const throughDate = editionDay(generatedAt);
+  const week = getIsoWeekInfo(throughDate);
   const outputDir = join(config.OUTPUT_DIR, "weekly", week.weekKey);
 
   await mkdir(outputDir, { recursive: true });
@@ -42,10 +45,11 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
       repository,
       config.OUTPUT_DIR,
       week.startDateStr,
-      week.endDateStr,
+      throughDate,
       limit,
       config.MOCK_MODE
     );
+    if (!config.MOCK_MODE) requireEditionItems(selectedItems.length, `${week.weekKey} daily audits through ${throughDate}`);
 
     // 2. 组装并渲染周报内容 (Markdown 和 HTML)
     const weeklyTitle = `智游镜 | 每周AI游戏新闻速递 ${week.weekKey}`;
@@ -70,7 +74,7 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
     // 3. 写入本地文件
     await Promise.all([
       writeFile(weeklyMarkdownPath, weeklyMarkdown, "utf8"),
-      writeFile(weeklyHtmlPath, weeklyHtml, "utf8")
+      writeEditionFile(weeklyHtmlPath, weeklyHtml)
     ]);
 
     // 4. 保存 pipeline 运行记录到 SQLite 中
@@ -125,6 +129,13 @@ export async function runWeeklyPipeline(config: AppConfig, options: WeeklyPipeli
       weeklyMarkdownPath,
       weeklyHtmlPath
     };
+  } catch (error) {
+    repository.savePipelineRun({
+      status: "failed", startedAt: generatedAt, completedAt: new Date().toISOString(),
+      config: { command: "run-weekly", weekKey: week.weekKey, throughDate },
+      error: error instanceof Error ? error.message : "Weekly edition failed."
+    });
+    throw error;
   } finally {
     repository.close();
   }
@@ -187,12 +198,12 @@ async function listWeeklyItemsFromDailyAudits(
 
     for (const entry of audit.selected) {
       const persisted = repository.getProcessedItem(entry.id);
-      if (persisted?.isMock && !includeMock) {
+      if (!includeMock && (persisted?.isMock || entry.isMock || entry.id.startsWith("mock-") || (!persisted && entry.isMock !== false))) {
         continue;
       }
 
-      const item = persisted ? { ...persisted, selected: true } : auditEntryToNewsItem(entry, audit.generatedAt);
-      candidates.set(item.id, item);
+      const item = persisted ? { ...persisted, ...entry.article, selected: true } : auditEntryToNewsItem(entry, audit.generatedAt);
+      candidates.set(canonicalizeUrl(item.sourceUrl), item);
     }
   }
 
@@ -248,7 +259,8 @@ function auditEntryToNewsItem(entry: DailySelectionAuditEntry, generatedAt: stri
     aiTags: [],
     gameTags: [],
     isTopicCandidate: true,
-    exclusionReason: ""
+    exclusionReason: "",
+    ...entry.article
   };
 }
 
@@ -291,6 +303,8 @@ interface DailySelectionAudit {
 
 interface DailySelectionAuditEntry {
   id: string;
+  isMock?: boolean;
+  article?: Pick<NewsItem, "articleTitle" | "articleBody" | "introSummary" | "publishedAt">;
   title: string;
   category: string;
   sourceName: string;
@@ -302,18 +316,4 @@ interface DailySelectionAuditEntry {
     category: string;
     officialSources: string[];
   };
-}
-
-function normalizeGeneratedAt(date?: string): string {
-  if (!date) {
-    return new Date().toISOString();
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
-    return `${date}T00:00:00.000Z`;
-  }
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`Invalid --date value: ${date}`);
-  }
-  return parsed.toISOString();
 }

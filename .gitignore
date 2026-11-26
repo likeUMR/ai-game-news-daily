@@ -19,6 +19,7 @@ output/**
 !output/**/wechat.html
 !output/**/weekly.html
 !output/.gitkeep
+output/.work/
 *.mp3
 *.wav
 *.m4a

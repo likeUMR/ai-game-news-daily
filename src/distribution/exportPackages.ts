@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { NewsItem } from "../pipeline/types.js";
+import { editionDay } from "../pipeline/edition.js";
 
 export const DISTRIBUTION_PLATFORMS = [
   "bilibili",
@@ -111,7 +112,7 @@ const PLATFORM_CONFIGS: PlatformConfig[] = [
 ];
 
 export async function createDistributionExportPackages(input: DistributionExportInput): Promise<DistributionExportResult> {
-  const date = input.generatedAt.slice(0, 10);
+  const date = editionDay(input.generatedAt);
   const distributionDir = join(input.outputRoot, date, "distribution");
   await mkdir(distributionDir, { recursive: true });
 
@@ -184,7 +185,7 @@ export function validatePlatformMetadata(metadata: Pick<PlatformMetadata, "platf
 }
 
 function createTitle(generatedAt: string, items: NewsItem[]): string {
-  const date = generatedAt.slice(0, 10);
+  const date = editionDay(generatedAt);
   const firstTitle = items[0]?.articleTitle.trim();
   return firstTitle ? `${date} AI + Game News Daily: ${firstTitle}` : `${date} AI + Game News Daily`;
 }

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { canonicalizeUrl, hashContent } from "../pipeline/dedupe.js";
 import type { NewsItem, SourceType } from "../pipeline/types.js";
+import type { PublicationWindow } from "../pipeline/edition.js";
 
 export { canonicalizeUrl, hashContent };
 
@@ -290,7 +291,7 @@ export class NewsRepository {
     this.db.prepare("UPDATE raw_items SET duplicate_of = ? WHERE id = ?").run(duplicateOf, id);
   }
 
-  listPendingRawItems(limit = 500): PendingRawItem[] {
+  listPendingRawItems(limit = 500, window?: PublicationWindow, includeDemo = true): PendingRawItem[] {
     const rows = this.db.prepare(`
       SELECT
         r.id,
@@ -307,10 +308,12 @@ export class NewsRepository {
       FROM raw_items r
       JOIN sources s ON s.id = r.source_id
       LEFT JOIN processed_items p ON p.raw_item_id = r.id
-      WHERE p.id IS NULL
-      ORDER BY r.collected_at ASC
+      WHERE (p.id IS NULL OR p.exclusion_reason LIKE 'ai enrichment failed:%')
+        AND (@start IS NULL OR r.published_at BETWEEN @start AND @end)
+        AND (@includeDemo OR COALESCE(json_extract(r.metadata, '$.collector'), '') <> 'demo')
+      ORDER BY r.published_at DESC, r.id
       LIMIT @limit
-    `).all({ limit }) as PendingRawItemRow[];
+    `).all({ limit, start: window?.start ?? null, end: window?.end ?? null, includeDemo: Number(includeDemo) }) as PendingRawItemRow[];
 
     return rows.map((row) => ({
       id: row.id,
@@ -344,6 +347,25 @@ export class NewsRepository {
     return rows.map(mapProcessedItem);
   }
 
+  listEditionItems(window: PublicationWindow, includeMock: boolean, selectedOnly = false): NewsItem[] {
+    const rows = this.db.prepare(`
+      SELECT p.*, r.duplicate_of AS raw_duplicate, parent.id AS parent_id
+      FROM processed_items p LEFT JOIN raw_items r ON r.id = p.raw_item_id
+      LEFT JOIN processed_items parent ON parent.raw_item_id = r.duplicate_of
+      WHERE p.published_at BETWEEN @start AND @end
+        AND (@includeMock OR (p.is_mock = 0 AND COALESCE(json_extract(r.metadata, '$.collector'), '') <> 'demo'))
+        AND p.exclusion_reason NOT LIKE 'ai enrichment failed:%'
+        AND (@selectedOnly = 0 OR (p.selected = 1 AND p.is_topic_candidate = 1 AND p.duplicate_of IS NULL AND r.duplicate_of IS NULL))
+      ORDER BY p.score DESC, p.source_weight DESC, p.published_at DESC, p.id
+    `).all({ ...window, includeMock: Number(includeMock), selectedOnly: Number(selectedOnly) }) as Array<ProcessedItemRow & {
+      raw_duplicate: string | null; parent_id: string | null;
+    }>;
+    return rows.map((row) => {
+      const item = mapProcessedItem(row);
+      return row.raw_duplicate ? { ...item, selected: false, isTopicCandidate: false, duplicateOf: row.parent_id, exclusionReason: "duplicate" } : item;
+    });
+  }
+
   saveProcessedFields(item: Partial<NewsItem> & Pick<NewsItem, "id"> & { rawItemId?: string | null }): NewsItem {
     const current = this.getProcessedItem(item.id);
     const next = toPersistedNewsItem({ ...defaultNewsItem(item.id), ...current, ...item });
@@ -369,7 +391,7 @@ export class NewsRepository {
         @exclusionReason, @createdAt, @updatedAt
       )
       ON CONFLICT(id) DO UPDATE SET
-        raw_item_id = excluded.raw_item_id,
+        raw_item_id = COALESCE(excluded.raw_item_id, processed_items.raw_item_id),
         source_url = excluded.source_url,
         source_name = excluded.source_name,
         source_type = excluded.source_type,
@@ -739,6 +761,22 @@ export function initializeDatabase(db: Database.Database): void {
     INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
     VALUES (1, 'initial_news_repository_schema', ?)
   `).run(new Date().toISOString());
+
+  db.transaction(() => {
+    const migration = db.prepare(`
+      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+      VALUES (2, 'restore_audited_raw_item_links', ?)
+    `).run(new Date().toISOString());
+    if (migration.changes) {
+      db.exec(`
+        UPDATE processed_items AS item SET raw_item_id = item.id
+        WHERE item.raw_item_id IS NULL AND item.is_mock = 0
+          AND EXISTS (SELECT 1 FROM raw_items raw WHERE raw.id = item.id AND raw.source_url = item.source_url)
+          AND EXISTS (SELECT 1 FROM processing_audit_logs audit WHERE audit.raw_item_id = item.id
+                      AND audit.processed_item_id = item.id AND audit.stage = 'screening')
+      `);
+    }
+  })();
 }
 
 function defaultNewsItem(id: string): NewsItem {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { MockAIProvider, enrichWithProvider } from "../src/ai/mockProvider.js";
 import { OpenAICompatibleProvider } from "../src/ai/openAiCompatibleProvider.js";
 import { createAIProvider } from "../src/ai/providerFactory.js";
+import { resolveModelConnection } from "../src/ai/modelConnection.js";
 import { AIResponseValidationError, articleEntrySchema, classificationSchema, groupedArticleEntriesSchema, parseAiJsonResponse } from "../src/ai/schemas.js";
 import type { NewsItem } from "../src/pipeline/types.js";
 
@@ -174,7 +175,7 @@ describe("OpenAICompatibleProvider", () => {
     }) as typeof fetch;
 
     try {
-      const provider = OpenAICompatibleProvider.fromEnv({ OPENAI_COMPATIBLE_API_KEY: "test-key" });
+      const provider = OpenAICompatibleProvider.fromEnv({ OPENAI_COMPATIBLE_API_KEY: "test-key", OPENAI_COMPATIBLE_BASE_URL: "https://taishi.tuyoo.com/v1" });
       await expect(provider?.summarize(createItem("relay", "AI game update"))).resolves.toEqual({
         summary: "ok",
         introSummary: "ok"
@@ -183,8 +184,34 @@ describe("OpenAICompatibleProvider", () => {
       globalThis.fetch = originalFetch;
     }
 
-    expect(String(requests[0]?.input)).toBe("https://api.openai.com/v1/chat/completions");
-    expect(requests[0]?.body).toMatchObject({ model: "gemini-3-flash-preview" });
+    expect(String(requests[0]?.input)).toBe("https://taishi.tuyoo.com/v1/chat/completions");
+    expect(requests[0]?.body).toMatchObject({ model: "gemini-3.5-flash-lite" });
+  });
+
+  test("keeps official and gateway credentials on their configured endpoints", () => {
+    expect(() => resolveModelConnection({ LLM_TOKEN: "relay" })).toThrow(/BASE_URL/);
+    expect(() => resolveModelConnection({ LLM_TOKEN: "relay", OPENAI_COMPATIBLE_BASE_URL: "https://api.openai.com/v1" })).toThrow(/official/);
+    expect(() => resolveModelConnection({ OPENAI_API_KEY: "official", LLM_BASE_URL: "https://relay.example/v1" })).toThrow(/matched/);
+    expect(() => resolveModelConnection({ OPENAI_API_KEY: "relay", OPENAI_BASE_URL: "https://other.example/v1" })).toThrow(/official/);
+    expect(() => resolveModelConnection({ LLM_TOKEN: "relay", LLM_BASE_URL: "http://relay.example/v1" })).toThrow(/HTTPS/);
+    expect(resolveModelConnection({ OPENAI_API_KEY: "official" })).toMatchObject({ baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" });
+    expect(resolveModelConnection({ LLM_TOKEN: "relay", DEEPSEEK_API_KEY: "direct" }, "deepseek")).toEqual({
+      apiKey: "direct", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-flash"
+    });
+    expect(() => resolveModelConnection({ DEEPSEEK_API_KEY: "direct", DEEPSEEK_BASE_URL: "https://unexpected.example" }, "deepseek")).toThrow(/official/);
+  });
+
+  test("migrates the Linux model pin only on the two configured Tuyou endpoints", () => {
+    const oldModel = "gemini-3-flash-preview";
+    for (const hostname of ["relay.tuyoo.com", "taishi.tuyoo.com"]) {
+      const base = `https://${hostname}/v1/`;
+      for (const env of [
+        { LLM_TOKEN: "fixture", LLM_BASE_URL: base, LLM_MODEL: oldModel },
+        { OPENAI_COMPATIBLE_API_KEY: "fixture", OPENAI_COMPATIBLE_BASE_URL: base, OPENAI_COMPATIBLE_MODEL: oldModel }
+      ]) expect(resolveModelConnection(env)).toMatchObject({ model: "gemini-3.5-flash-lite", migratedFrom: oldModel });
+    }
+    expect(resolveModelConnection({ LLM_TOKEN: "fixture", LLM_BASE_URL: "https://other.example/v1", LLM_MODEL: oldModel })?.model).toBe(oldModel);
+    expect(resolveModelConnection({ LLM_TOKEN: "fixture", LLM_BASE_URL: "https://relay.tuyoo.com/v1", LLM_MODEL: "chosen-model" })?.model).toBe("chosen-model");
   });
 
   test("accepts LLM_TOKEN and LLM_MODEL aliases for relay configuration", async () => {

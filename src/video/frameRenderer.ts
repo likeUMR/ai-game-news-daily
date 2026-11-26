@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import type { NewsItem, TimelineEvent } from "../pipeline/types.js";
+import { editionDay } from "../pipeline/edition.js";
 
 export type FrameKind = "title" | "category" | "news" | "quote-source" | "progress" | "outro";
 
@@ -47,7 +48,7 @@ export async function renderVideoFrames(
   options: RenderVideoFramesOptions
 ): Promise<VideoFrameRenderResult> {
   const dimensions = { ...defaultDimensions, ...options.dimensions };
-  const date = options.generatedAt.slice(0, 10);
+  const date = editionDay(options.generatedAt);
   const frameRoot = join(options.outputRoot, date, "frames");
   const htmlDir = join(frameRoot, "html");
   const pngDir = join(frameRoot, "png");
@@ -317,7 +318,7 @@ function firstNonEmpty(...values: string[]): string {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "Asia/Shanghai" }).format(new Date(value));
 }
 
 function formatDuration(ms: number): string {

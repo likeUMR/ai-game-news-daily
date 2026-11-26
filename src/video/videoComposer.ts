@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import type { TimelineEvent } from "../pipeline/types.js";
+import { editionDay } from "../pipeline/edition.js";
 import type { VideoFrame } from "./frameRenderer.js";
 
 export interface VideoCompositionInput {
@@ -211,7 +212,7 @@ export function buildFfmpegCommand(input: {
 }
 
 function compositionPaths(generatedAt: string, outputRoot: string): { workDir: string; videoPath: string; auditPath: string } {
-  const workDir = join(outputRoot, generatedAt.slice(0, 10));
+  const workDir = join(outputRoot, editionDay(generatedAt));
   return {
     workDir,
     videoPath: join(workDir, "daily.mp4"),

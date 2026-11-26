@@ -12,7 +12,7 @@ import type { NewsItem, PipelineResult } from "../src/pipeline/types.js";
 import { renderDailyMarkdown } from "../src/render/markdownRenderer.js";
 
 const fixedDate = "2026-05-19";
-const fixedGeneratedAt = `${fixedDate}T00:00:00.000Z`;
+const fixedGeneratedAt = `${fixedDate}T15:59:59.999Z`;
 const tempDirs: string[] = [];
 
 afterEach(async () => {
